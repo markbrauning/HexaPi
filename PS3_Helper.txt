@@ -1,0 +1,100 @@
+
+Control / Action
+Axis index
+Button index
+
+Left stick left / right
+0
+---
+
+Left stick up / down
+1
+---
+
+Left stick push in (L3)
+---
+1
+
+Right stick left / right
+2
+---
+
+Right stick up / down
+3
+---
+
+Right stick push in (R3)
+---
+2
+
+D-Pad left
+11
+7
+
+D-Pad right
+9
+5
+
+D-Pad up
+8
+4
+
+D-Pad down
+10
+6
+
+Square
+19
+15
+
+Triangle
+16
+12
+
+Circle
+17
+13
+
+Cross
+18
+14
+
+L1
+14
+10
+
+L2
+12
+8
+
+R1
+15
+11
+
+R2
+13
+9
+
+Select
+---
+0
+
+Start
+---
+3
+
+PS (logo)
+---
+16
+
+Motion pitch
+5
+---
+
+Motion roll #1
+4
+---
+
+Motion roll #2
+6
+---
