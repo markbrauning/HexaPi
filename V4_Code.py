@@ -8,6 +8,7 @@ pwm1 = ServoKit(channels=16, address=0x41)
 global gait_selected
 gait_selected = 0
 
+
 global foot_vectors
 foot_vectors=[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
 
@@ -41,7 +42,7 @@ def read_in_servo_config():
                     row_count += 1
                 print('Processed %s columns.' % (col_count))
                 print('Processed %s rows.' % (row_count))
-                print("servo config import complete")
+                print("servo config im port complete")
 
 #Desc.
 def read_in_gaits():
@@ -112,8 +113,6 @@ def read_in_gaits():
                     row_count += 1
                 print('Gait 3. Processed %s rows.' % (row_count))
 
-
-
 #Desc.
 def foot_vector_main():
 	print("foot_vector_main thread has started.")
@@ -121,8 +120,13 @@ def foot_vector_main():
 	prev_a_js_left_y = 0
 	prev_a_js_right_x = 0
 	
-	while True:
-		time.sleep(0.1)
+	#start Gait thread
+	gait_thread = threading.Thread(target=gait_main,args=())
+	gait_thread.setDaemon(True)
+	gait_thread.start()
+	
+	while not vector_thread_kill:
+		time.sleep(0.025)
 		a_js_left_x = psc.j_lx
 		a_js_left_y = psc.j_ly
 		a_js_right_x = psc.j_rx
@@ -131,6 +135,7 @@ def foot_vector_main():
 			prev_a_js_left_x = a_js_left_x
 			prev_a_js_left_y = a_js_left_y 
 			prev_a_js_right_x = a_js_right_x
+	print("foot_vector_main has ended")
 
 #Desc.
 def calc_foot_vectors(Qx,Qy,Qr):
@@ -312,25 +317,27 @@ class controller_inputs():
 def gait_main():
 	print("gait_main thread has started.")
 	while True:
-		for i in range(len(gait_array[gait_selected][0])):                                
+		for i in range(len(gait_array[gait_selected][0])): 
+			time.sleep(0.01)                               
 			foot_coordinates = calc_foot_xyz(i)
 			calculated_angles = calc_angles(foot_coordinates)
 			move_legs(calculated_angles)
+	print("gait_main has ended")
 #Desc.
 def controller_main(controller):
 	print("controller_main thread has started.")
 	global psc
 	while True:
-		time.sleep(0.2)
+		time.sleep(0.01)
 		events = pygame.event.get()
 		psc = controller_inputs(controller)
 	print("End of controller_main code.")
+
 #Desc.
 class controller_inputs():
 	def __init__(self,controller):
 		accuracy = 3
 		self.controller = controller
-		events = pygame.event.get()
 		self.j_lx = round(controller.get_axis(0),accuracy)
 		self.j_ly = round(controller.get_axis(1),accuracy)
 		self.j_rx = round(controller.get_axis(2),accuracy)
@@ -342,8 +349,18 @@ class controller_inputs():
 		self.b_circle = controller.get_button(1)
 		self.b_triangle = controller.get_button(2)
 		self.b_square = controller.get_button(3)
+		self.b_select_hc
+		
+#Desc.
+#
+#def servo_tester():
+	
 #Desc.
 def hexapi_main():
+	#Get Gait and servo configs
+	read_in_servo_config()
+	read_in_gaits()
+	
 	#Check if there are any controllers connected
 	controller_found = False
 	controller_count = 0
@@ -366,35 +383,42 @@ def hexapi_main():
 			time.sleep(2)
 			pygame.joystick.quit()
 	
-	#Get Gait and servo configs
-	read_in_servo_config()
-	read_in_gaits()
-	
 	#start controller input monitoring thread
 	contr_thread = threading.Thread(target=controller_main,args=(controller, ))
 	contr_thread.setDaemon(True)
 	contr_thread.start()
+	time.sleep(2)
 	
-	time.sleep(1)
-	
-	#Start foot vector thread
+	#Define other threads
 	vector_thread = threading.Thread(target=foot_vector_main,args=())
 	vector_thread.setDaemon(True)
-	vector_thread.start()
 	
-	#start Gait thread
-	gait_thread = threading.Thread(target=gait_main,args=())
-	gait_thread.setDaemon(True)
-	gait_thread.start()
-	
+	#Main
+	refresh_rate = 0.01
 	gait_selected = 0
 	exit_main = False
+	b_start_hold = 0
 	while not exit_main:
-		time.sleep(1)
-		start_time = time.time()
+		time.sleep(refresh_rate)
+		#exit code inputs
 		if (psc.b_start == 1) and (psc.b_select == 1):
 			print("Start+Select buttons pressed. Exiting controller_main...")
 			exit_main = True
+		
+		#Start/End Vector & Gait threads
+		if (psc.b_start == 1):
+			b_start_hold = b_start_hold + 1
+		else:
+			b_start_hold = 0
+		if b_start_hold == 30:
+			print("start pressed for 3 seconds")
+			if vector_thread.is_alive():
+				print("vector_thread_kill set to True")
+				vector_thread_kill = True
+			else:
+				#Start foot vector thread
+				vector_thread.start()
+		
 		if psc.b_cross == 1:
 			if gait_selected < 4:
 				gait_selected = gait_selected + 1
@@ -402,5 +426,8 @@ def hexapi_main():
 				gait_selected = 0
 			print("Gait %s selected." % (gait_selected))
 	print("End of hexapi_main code.")
+
+
+
 #Start program
 hexapi_main()

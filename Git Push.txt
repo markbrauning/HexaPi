@@ -1,0 +1,7 @@
+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
+
+cd /home/hexapi/Desktop/HexaPi
+git pull
+git add --all
+git commit -a -m "okay"
+git push
