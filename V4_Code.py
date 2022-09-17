@@ -8,6 +8,8 @@ pwm1 = ServoKit(channels=16, address=0x41)
 global gait_selected
 gait_selected = 0
 
+global vector_thread_kill
+vector_thread_kill = False
 
 global foot_vectors
 foot_vectors=[[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
@@ -126,7 +128,9 @@ def foot_vector_main():
 	gait_thread.start()
 	
 	while not vector_thread_kill:
-		time.sleep(0.025)
+		time.sleep(0.05)
+		if vector_thread_kill:
+			print("foot_vector_main detect kill as True")
 		a_js_left_x = psc.j_lx
 		a_js_left_y = psc.j_ly
 		a_js_right_x = psc.j_rx
@@ -135,11 +139,14 @@ def foot_vector_main():
 			prev_a_js_left_x = a_js_left_x
 			prev_a_js_left_y = a_js_left_y 
 			prev_a_js_right_x = a_js_right_x
+			report_string = "\rFoot Vectors... x=" + str(round(a_js_left_x,1)) + " y=" + str(round(a_js_left_y,1)) + " r=" + str(round(a_js_right_x,1))
+			sys.stdout.write(report_string)
+			sys.stdout.flush()
 	print("foot_vector_main has ended")
 
 #Desc.
 def calc_foot_vectors(Qx,Qy,Qr):
-	print("Calculating Foot Vecotrs... ")
+	#print("Calculating Foot Vecotrs... ")
 	gfv=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
 	xlation_angle=[5.2360,0,1.0472,0.2122,3.1416,4.1888]
 	
@@ -297,23 +304,6 @@ def calc_foot_xyz(i):
     return foot_coordinates
 
 #Desc.
-class controller_inputs():
-	def __init__(self,controller):
-		accuracy = 3
-		self.controller = controller
-		events = pygame.event.get()
-		self.j_lx = round(controller.get_axis(0),accuracy)
-		self.j_ly = round(controller.get_axis(1),accuracy)
-		self.j_rx = round(controller.get_axis(2),accuracy)
-		self.j_ry = round(controller.get_axis(3),accuracy)
-		self.b_select = controller.get_button(8)
-		self.b_start = controller.get_button(9)
-		self.b_ps = controller.get_button(10)
-		self.b_cross = controller.get_button(0)
-		self.b_circle = controller.get_button(1)
-		self.b_triangle = controller.get_button(2)
-		self.b_square = controller.get_button(3)
-#Desc.
 def gait_main():
 	print("gait_main thread has started.")
 	while True:
@@ -349,7 +339,6 @@ class controller_inputs():
 		self.b_circle = controller.get_button(1)
 		self.b_triangle = controller.get_button(2)
 		self.b_square = controller.get_button(3)
-		self.b_select_hc
 		
 #Desc.
 #
@@ -410,13 +399,16 @@ def hexapi_main():
 			b_start_hold = b_start_hold + 1
 		else:
 			b_start_hold = 0
-		if b_start_hold == 30:
+		if b_start_hold == 300:
 			print("start pressed for 3 seconds")
 			if vector_thread.is_alive():
 				print("vector_thread_kill set to True")
 				vector_thread_kill = True
+				time.sleep(1)
 			else:
 				#Start foot vector thread
+				vector_thread_kill = False
+				time.sleep(0.5)
 				vector_thread.start()
 		
 		if psc.b_cross == 1:
