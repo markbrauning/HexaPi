@@ -5,4 +5,6 @@ Item 1
   Include this before exit 0:
     sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp.py &
 Item 2
+  figure out how to make sounds with HexaPi.
+    audio to send threading statuses
   
