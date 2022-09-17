@@ -1,10 +1,15 @@
 Item 1
-  Create a start up script
-  Edit rc.local
-    sudo nano /etc/rc.local
-  Include this before exit 0:
-    sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp.py &
+	Create a start up script
+	Edit rc.local
+	sudo nano /etc/rc.local
+	Include this before exit 0:
+	sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp.py &
+	reboot to test
 Item 2
-  figure out how to make sounds with HexaPi.
-    audio to send threading statuses
+	figure out how to make sounds with HexaPi.
+	audio to send threading statuses
+Item 3
+	Separate out the controller connection script to its own thread.
+	Initialize and manage this thread from the StartUp script.
+
   
