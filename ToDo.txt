@@ -1,0 +1,8 @@
+Item 1
+  Create a start up script
+  Edit rc.local
+    sudo nano /etc/rc.local
+  Include this before exit 0:
+    sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp.py &
+Item 2
+  
