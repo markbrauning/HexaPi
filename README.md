@@ -17,3 +17,5 @@ sudo ~/sixpair
 
 I kept getting usb.h missing error so i ran the following:
 sudo apt-get install libusb-dev
+
+Test get 9-17-22
