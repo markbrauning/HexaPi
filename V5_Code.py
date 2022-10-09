@@ -223,6 +223,7 @@ class psc_update:
 
 class hexapi_robot:
 	def __init__(self):
+		print("HexaPi Robot object initializing")
 		self.pwm = [0]*2
 		self.pwm[0] = ServoKit(channels=16, address=0x40)
 		self.pwm[1] = ServoKit(channels=16, address=0x41)
@@ -263,9 +264,10 @@ class hexapi_robot:
 				print("angle " + str(angle) + " out of bounds")
 	def config_edit(self, prop, leg, part, val):
 		csvfile = pandas.read_csv(self.config_filename)
-		row = (leg-1)*3+part
+		row = (leg-1)*3+part-1
 		csvfile.loc[row,prop] = csvfile.loc[row,prop] + val
 		csvfile.to_csv(self.config_filename,index=False)
+		self.__init__()
 		print(csvfile)
 
 def controller_connection():
@@ -444,11 +446,9 @@ def Servo_Config_Module():
 			prop = prop + 1
 		print("Config edit property set to: " + hx.prop_names[prop])
 	if psc.b_L1.pressed == 1:
-		#hx.config_edit(prop, leg, part, -1)
-		pass
+		hx.config_edit(hx.prop_names[prop], leg, part, -1)
 	if psc.b_R1.pressed == 1:
-		#hx.config_edit(prop, leg, part, 1)
-		pass
+		hx.config_edit(hx.prop_names[prop], leg, part, 1)
 	
 #Start program
 hexapi_main()
