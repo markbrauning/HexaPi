@@ -223,7 +223,7 @@ class psc_update:
 
 class hexapi_robot:
 	def __init__(self):
-		print("HexaPi Robot object initializing")
+		#print("HexaPi Robot object initializing")
 		self.pwm = [0]*2
 		self.pwm[0] = ServoKit(channels=16, address=0x40)
 		self.pwm[1] = ServoKit(channels=16, address=0x41)
@@ -237,12 +237,16 @@ class hexapi_robot:
 							"#4:lower limit pwm",
 							"#5:upper limit pwm",
 							"#6:offset",
-							"#7:upper limit physical",
+							"#7:lower limit physical",
 							"#8:upper limit physical"]
+		self.l1 = 7.75 #old length_arm
+		self.l2 = 14.5 #old length_claw
+		self.l3 = 5.75 #old length_shoulder
 		with open(self.config_filename,newline='') as csvfile:
 			arr = list(csv.reader(csvfile))
 		self.motor = [[0 for x in range(4)] for y in range(7)]
-		for r in range(1,18):
+		for r in range(1,19):
+			#motor[leg][part]
 			self.motor[int(arr[r][0])][int(arr[r][1])] = self.motor_class(r, arr, self.pwm)
 	class motor_class():
 		def __init__(self,r,arr,pwm):
@@ -256,10 +260,12 @@ class hexapi_robot:
 			self.offset = int(arr[r][6])
 			self.LLphyang = int(arr[r][7])
 			self.ULphyang = int(arr[r][8])
+			self.pwm[self.hat].servo[self.chan].set_pulse_width_range(self.LLpwm,self.ULpwm)
+			#self.pwm[self.hat].servo[self.chan].angle = 90 + self.offset
 			
 		def move(self, angle):
-			if angle > self.LLphyang and angle < self.ULphyang:
-				self.pwm[self.hat].servo[self.chan].angle = angle
+			if angle >= self.LLphyang and angle <= self.ULphyang:
+				self.pwm[self.hat].servo[self.chan].angle = angle + self.offset
 			else:
 				print("angle " + str(angle) + " out of bounds")
 	def config_edit(self, prop, leg, part, val):
@@ -267,8 +273,10 @@ class hexapi_robot:
 		row = (leg-1)*3+part-1
 		csvfile.loc[row,prop] = csvfile.loc[row,prop] + val
 		csvfile.to_csv(self.config_filename,index=False)
+		#print(csvfile.loc[0,:])
+		#print(csvfile.loc[row,:])
+		print("Prop " + str(prop) + " set to: " + str(csvfile.loc[row,prop]))
 		self.__init__()
-		print(csvfile)
 
 def controller_connection():
 	global controller_connected
@@ -277,7 +285,7 @@ def controller_connection():
 
 	pygame.init()
 	pygame.display.init()
-	idle_wait = 5
+	idle_wait = 60
 	while True:
 		time.sleep(2)
 		if not exit_main:
@@ -317,7 +325,7 @@ def controller_connection():
 			while controller_connected:
 				time.sleep(0.5)
 				idle_time = psc.idle_seconds
-				#only check if controller inputs have gone unchanged for 10 seconds
+				#only check if controller inputs have gone unchanged for 'idle_wait' seconds
 				if idle_time > idle_wait:
 					msg = "\rController idle for " + str(idle_time) + ". Checking connection status"
 					sys.stdout.write(msg)
@@ -345,8 +353,10 @@ def hexapi_main():
 	global controller_connected
 	global refresh_rate
 	global exit_Servo_Config
+	global exit_single_leg_module
 	global leg, part, prop
-
+	global test_angle
+	
 	#Global Variable Def
 	hx = hexapi_robot()
 	psc = None
@@ -355,9 +365,11 @@ def hexapi_main():
 	controller_connected = False
 	refresh_rate = 0.05
 	exit_Servo_Config = True
+	exit_single_leg_module = True
 	leg = 1
 	part = 3
 	prop = 6
+	test_angle = 90
 	
 	#Define controller_connection threads
 	controller_connection_thread = threading.Thread(target=controller_connection,args=())
@@ -384,38 +396,13 @@ def hexapi_main():
 			
 			toc = time.perf_counter()
 			if (toc - tic) > 0.005:
-				print(f"Main loop is lagging and took : {toc - tic:0.5f} seconds to complete.")
+				pass
+				#print(f"Main loop is lagging and took : {toc - tic:0.5f} seconds to complete.")
 		time.sleep(0.5)
 	print("End of hexapi_main code.")
-
-def main_input_monitor():
-	global exit_main
-	global exit_Servo_Config
-	global controller_connected
-	
-	#Print button pessed name
-	for i in range(jsc.btn_num):
-		if psc.btn[i].pressed == 1:
-			print(psc.btn[i].name)
-	
-	#hexapi_main Exit
-	if psc.b_ps.pds == 1:
-		print("PS Logo button pressed for 1 seconds. Exiting Monitor Loop...")
-		controller_connected = False
-		exit_main = True
-	
-	#Servo_Config_Module Run or Not
-	if psc.b_tri.pds == 1 and exit_Servo_Config == False:
-		print("Servo_Config_Module set to exit")
-		exit_Servo_Config = True
-	elif psc.b_tri.pds == 1 and exit_Servo_Config == True:
-		print("Servo_Config_Module set to start")
-		exit_Servo_Config = False
-	if exit_Servo_Config == False:
-		Servo_Config_Module()
 	
 def Servo_Config_Module():
-	global leg, part, prop
+	global leg, part, prop, test_angle
 	if psc.b_R.pressed == 1:
 		if leg == 6:
 			leg = 1
@@ -428,28 +415,132 @@ def Servo_Config_Module():
 		else:
 			part = part + 1
 		print("part selected: " + str(part))
-	
-	if psc.j_Rx.val_changed == 1:
-		test_angle = 90 + int(float(psc.j_Rx.val) * 88)
-		test_angle_str = str(test_angle).zfill(3)
-		msg = "\r    Test angle set to: " + test_angle_str
-		sys.stdout.write(msg)
-		sys.stdout.flush()
-		try:
-			hx.motor[leg][part].move(test_angle)
-		except:
-			print("Failed to change motor angle with in hx object")
-	if psc.b_cross.pressed == 1:
+	if psc.b_down.pressed == 1:
 		if prop == 8:
 			prop = 4
 		else:
 			prop = prop + 1
 		print("Config edit property set to: " + hx.prop_names[prop])
-	if psc.b_L1.pressed == 1:
-		hx.config_edit(hx.prop_names[prop], leg, part, -1)
-	if psc.b_R1.pressed == 1:
-		hx.config_edit(hx.prop_names[prop], leg, part, 1)
 	
+	if prop == 4 or prop == 5:
+		val = 5
+	else:
+		val = 1	
+	if psc.b_L1.pressed == 1:
+		hx.config_edit(hx.prop_names[prop], leg, part, -val)
+		hx.motor[leg][part].move(test_angle)
+	if psc.b_R1.pressed == 1:
+		hx.config_edit(hx.prop_names[prop], leg, part, val)
+		hx.motor[leg][part].move(test_angle)
+	
+	if psc.j_Rx.val_changed == 1:
+		test_angle = 90 + int(float(psc.j_Rx.val) * 90)
+		test_angle_str = str(test_angle).zfill(3)
+		msg = "\r    Test angle set to: " + test_angle_str
+		sys.stdout.write(msg)
+		sys.stdout.flush()
+		#try:
+		hx.motor[leg][part].move(test_angle)
+		#except:
+		#	print("Failed to change motor angle with in hx object")
+
+def fixAcos(val):
+	if (val<=-1):
+		val = -1
+	if (val>=1):
+		val = 1
+	return val
+
+#Takes in the desired XYZ components for each leg and outputs the end angles
+def xyz2angles(x,y,z):
+	#[beta,theta,alpha] ie shoulder,arm,claw
+	servo_angles = [0,0,0]
+	if(x == 0):
+		x = 0.00001
+	xy = ((x**2)+(y**2))**(0.5)
+	c = (((xy-hx.l3)**2)+(z**2))**(0.5)
+	if c == 0:
+		c = 0.00001
+
+	#Calculate alpha
+	alpha_acos_piece = fixAcos(((hx.l1**2)+(hx.l2**2)-(c**2))/(2*hx.l1*hx.l2))
+	alpha = math.acos(alpha_acos_piece) - (math.pi/2)
+
+	#Calculate theta
+	theta_acos_piece = fixAcos(((hx.l1**2)+(c**2)-(hx.l2**2))/(2*hx.l1*c))
+	theta_acos_piece1 = fixAcos(z/c)
+	if(xy<=hx.l3):
+		theta_piece1 = - math.acos(theta_acos_piece1)
+	else:
+		theta_piece1 = math.acos(theta_acos_piece1)
+	theta = theta_piece1 - math.acos(theta_acos_piece)
+
+	#Calculate beta
+	beta_acos_piece = fixAcos(x/xy)
+	beta = math.pi - math.acos(beta_acos_piece)
+
+	if (beta > math.pi):
+		beta = math.pi
+	if (alpha > math.pi):
+		alpha = math.pi
+	if (theta > math.pi):
+		theta = math.pi
+
+	if (beta < 0):
+		beta = 0
+	if (alpha < 0):
+		alpha = 0
+	if (theta < 0):
+		theta = 0
+		
+	servo_angles = [beta*(180/math.pi),theta*(180/math.pi),alpha*(180/math.pi)]
+	return servo_angles
+
+def single_leg_module():
+	pass	
+
+def main_input_monitor():
+	global exit_main
+	global exit_Servo_Config
+	global exit_single_leg_module
+	global controller_connected
+	
+	#Print button pessed name
+	for i in range(jsc.btn_num):
+		if psc.btn[i].pressed == 1:
+			pass
+			#print(psc.btn[i].name)
+	
+	#hexapi_main Exit
+	if psc.b_ps.pds == 1:
+		print("PS Logo button pressed for 1 seconds. Exiting Monitor Loop...")
+		controller_connected = False
+		exit_main = True
+	
+	#Triangle
+	#Servo_Config_Module Run or Not
+	if psc.b_tri.pds == 1 and exit_Servo_Config == False:
+		print("Servo_Config_Module set to exit")
+		exit_Servo_Config = True
+	elif psc.b_tri.pds == 1 and exit_Servo_Config == True:
+		print("Servo_Config_Module set to start")
+		exit_Servo_Config = False
+	if exit_Servo_Config == False:
+		Servo_Config_Module()
+	
+	#Circle
+	#single_leg_module Run or Not
+	if psc.b_circle.pds == 1 and exit_single_leg_module == False:
+		print("single_leg_module set to exit")
+		exit_Servo_Config = True
+	elif psc.b_circle.pds == 1 and exit_single_leg_module == True:
+		print("single_leg_module set to start")
+		print("")
+		exit_Servo_Config = False
+	if exit_Servo_Config == False:
+		single_leg_module()
+
+
 #Start program
 hexapi_main()
 

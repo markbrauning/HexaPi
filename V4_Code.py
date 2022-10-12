@@ -183,14 +183,6 @@ def calc_foot_vectors(Qx,Qy,Qr):
 		foot_vectors[leg][2] = round(((foot_vectors[leg][0]**2)+(foot_vectors[leg][1]**2))**(0.5),2)
 	return foot_vectors
 
-#Set up min max pulse of servos
-def motor_calibration():
-	#future
-	#use_pwm = int(servo_config[use_col][use_angle])
-	#kit.servo[0].set_pulse_width_range(1000, 2000)
-	#use_pwm = int(servo_config[use_col][use_angle])
-	x=1
-
 #Take in calucluated angles for a motor and moves it using PWM
 def move_motor(leg, part, servo_angle):
     use_col = 3*leg + part
@@ -218,7 +210,7 @@ def calc_angles(foot_coordinates):
     #                leg1      2       3       4       5       6
     #           [beta,theta,alpha] ie shoulder,arm,claw
     servo_angles = [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
-
+																																																						
 
     for leg in range(6):
         x = foot_coordinates[leg][0]
@@ -363,31 +355,6 @@ class controller_inputs():
 		self.b_down = controller.get_button(14)		#14 d-pad down
 		self.b_left = controller.get_button(15)		#15 d-pad left
 		self.b_right = controller.get_button(16)	#16 d-pad right
-		
-		#button press durations
-		def b_duration(button):
-			if button == 1 and button_last == 1:
-				button.bd = 
-			
-		if psc.b_dr == 1:
-			b_dr_hold = b_dr_hold + 1
-			if b_dr_hold == 10:
-				if chan == 16:
-					chan = 1
-				else:
-					chan = chan + 1
-				print("Channel selected: " + str(chan))
-		else:
-			b_dr_hold = 0
-		
-		
-		
-		
-		
-		
-		pass
-		#Button hold durations
-		
 		
 #Desc.
 def oneleg_main(oneleg_event):
