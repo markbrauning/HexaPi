@@ -19,10 +19,41 @@ global jsc
 global psc
 
 #Global Variables
-exit_main = False
 hx = None
 psc = None
 Servo_Config_Module_thread = None
+
+def read_in_gaits():
+	print("Importing gaits...")
+	listofgates = [ "gaits/gait_0.csv",
+					"gaits/gait_1.csv",
+					"gaits/gait_2.csv",
+					"gaits/gait_3.csv"]
+	global gait_array
+	global gait_array_size
+	#                 leg1    leg2    leg3    leg4    leg5    leg6
+	#                tz,txy  tz,txy  tz,txy  tz,txy  tz,txy  tz,txy 
+	gait_array =   [[[], [], [], [], [], [], [], [], [], [], [], []], #gait option 0
+					[[], [], [], [], [], [], [], [], [], [], [], []], #gait option 1
+					[[], [], [], [], [], [], [], [], [], [], [], []], #gait option 2
+					[[], [], [], [], [], [], [], [], [], [], [], []]] #gait option 3
+	gait_array_size = [0]*4
+	
+	for i in range(4):
+		with open(listofgates[i]) as csv_file:
+			csv_reader = csv.reader(csv_file, delimiter=',')
+			row_count = 0
+			for row in csv_reader:
+				col_count = 0
+				gait_array_col = 0
+				for col_entry in row:
+					if (row_count != 0) and ((col_count%3 != 0)):
+						gait_array[i][gait_array_col].append(col_entry)
+						gait_array_col += 1
+					col_count += 1  
+				row_count += 1
+		print(listofgates[i] + " : Processed %s rows." % (row_count))
+		gait_array_size[i] = row_count - 1
 
 class controller_class:
 	def __init__(self,i):
@@ -263,10 +294,12 @@ class hexapi_robot:
 			self.pwm[self.hat].servo[self.chan].set_pulse_width_range(self.LLpwm,self.ULpwm)
 			
 		def move(self, angle):
+			angle = angle + self.offset
 			if angle >= self.LLphyang and angle <= self.ULphyang:
-				self.pwm[self.hat].servo[self.chan].angle = angle + self.offset
+				self.pwm[self.hat].servo[self.chan].angle = angle
 			else:
-				print("angle " + str(angle) + " out of bounds")
+				pass
+				#print("angle " + str(angle) + " out of bounds")
 	def config_edit(self, prop, leg, part, val):
 		csvfile = pandas.read_csv(self.config_filename)
 		row = (leg-1)*3+part-1
@@ -274,6 +307,30 @@ class hexapi_robot:
 		csvfile.to_csv(self.config_filename,index=False)
 		print("Prop " + str(prop) + " set to: " + str(csvfile.loc[row,prop]))
 		self.__init__()
+
+class module_select:
+	def __init__(self):
+		functions = ["walk_module","stand","servo_config","single_leg"]
+		for i in range(len(functions)):
+			setattr(self, functions[i], "STOP")
+		self.allstopped = True
+	def start_stop(self,mod):
+		if getattr(self,mod) == "RUN":
+			setattr(self, mod, "STOP")
+		else:
+			setattr(self, mod, "RUN")
+			for key, val in self.__dict__.items():
+				if mod != key:
+					if val == "RUN":
+						setattr(self, key, "STOP")
+						print(key + " function set to: " + getattr(self,key))
+		print(mod + " function set to: " + getattr(self,mod))
+		self.all_stopped()
+	def all_stopped(self):
+		self.allstopped = True
+		for key, val in self.__dict__.items():
+			if val == "RUN":
+				self.allstopped = False
 
 def controller_connection():
 	global controller_connected
@@ -349,10 +406,18 @@ def hexapi_main():
 	global exit_main
 	global controller_connected
 	global refresh_rate
-	global exit_Servo_Config
-	global exit_single_leg_module
 	global leg, part, prop
 	global test_angle
+	global mods
+	global foot_vectors
+	global x_datum, y_datum, z_datum
+	global x, y, z
+	global foot_coordinates
+	global stride_scale
+	global stride_speed
+	global walk_idle
+	global gait_selected
+	global t
 	
 	#Global Variable Def
 	hx = hexapi_robot()
@@ -360,83 +425,97 @@ def hexapi_main():
 	jsc = None
 	exit_main = False
 	controller_connected = False
-	refresh_rate = 0.05
-	exit_Servo_Config = True
-	exit_single_leg_module = True
+	refresh_rate = 0.01
 	leg = 1
 	part = 3
 	prop = 6
 	test_angle = 90
+	mods = module_select()
+	foot_vectors = [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+	x_datum = 0
+	y_datum = 5
+	z_datum = -19
+	x = x_datum
+	y = y_datum
+	z = z_datum
+	#                      leg1     2       3       4       5       6
+	#                    [x,y,z] [x,y,z] [x,y,z] [x,y,z] [x,y,z] [x,y,z]
+	foot_coordinates  = [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]]
+	stride_scale = 2
+	stride_speed = 0
+	walk_idle = 0
+	gait_selected = 0
+	t = 0
 	
-	#Define controller_connection threads
+	#Read in Gait Array
+	read_in_gaits()
+	
+	#Define controller_connection thread
 	controller_connection_thread = threading.Thread(target=controller_connection,args=())
 	controller_connection_thread.setDaemon(True)
 	controller_connection_thread.start()
 	
 	#Main Loop
 	while not exit_main:
-		if controller_connected:
-			pass
-			#print("Controller connected. Entering Monitor Loop")
 		#Monitor Loop
 		while controller_connected:
 			time.sleep(refresh_rate)
 			tic = time.perf_counter()
-
+			
+			#Try to update controller input and status values
 			prev_psc = psc
 			try:
 				psc = psc_update(prev_psc, refresh_rate, jsc)
-				main_input_monitor()
+				
 			except:
-				#print("Controller input updates failed")
 				psc = prev_psc
 			
+			#run primary functions
+			main_input_monitor()
+			
 			toc = time.perf_counter()
-			if (toc - tic) > 0.005:
+			if (toc - tic) > refresh_rate:
 				pass
 				#print(f"Main loop is lagging and took : {toc - tic:0.5f} seconds to complete.")
 		time.sleep(0.5)
 	print("End of hexapi_main code.")
-	
-def Servo_Config_Module():
-	global leg, part, prop, test_angle
-	if psc.b_R.pressed == 1:
-		if leg == 6:
-			leg = 1
-		else:
-			leg = leg + 1
-		print("Leg selected: " + str(leg))
-	if psc.b_up.pressed == 1:
-		if part == 3:
-			part = 1
-		else:
-			part = part + 1
-		print("part selected: " + str(part))
-	if psc.b_down.pressed == 1:
-		if prop == 8:
-			prop = 4
-		else:
-			prop = prop + 1
-		print("Config edit property set to: " + hx.prop_names[prop])
-	
-	if prop == 4 or prop == 5:
-		val = 5
-	else:
-		val = 1	
-	if psc.b_L1.pressed == 1:
-		hx.config_edit(hx.prop_names[prop], leg, part, -val)
-		hx.motor[leg][part].move(test_angle)
-	if psc.b_R1.pressed == 1:
-		hx.config_edit(hx.prop_names[prop], leg, part, val)
-		hx.motor[leg][part].move(test_angle)
-	
-	if psc.j_Lx.val_changed == 1:
-		test_angle = 90 + int(float(psc.j_Lx.val) * 90)
-		test_angle_str = str(test_angle).zfill(3)
-		msg = "\r    Test angle set to: " + test_angle_str
-		sys.stdout.write(msg)
-		sys.stdout.flush()
-		hx.motor[leg][part].move(test_angle)
+
+def calc_foot_vectors(Qx,Qy,Qr):
+	gfv=[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]]
+	xlation_angle=[5.2360,0,1.0472,0.2122,3.1416,4.1888]
+
+	g_datum = [[-20.14,11.63],[0,23.25],[20.14,11.63],[20.14,-11.63],[0,-23.25],[-20.14,-11.63]]
+	Qxy_mag = (((g_datum[0][0])**2)+((g_datum[0][1])**2))**(0.5)
+
+	body_rotation_val = (Qr)/(2*Qxy_mag)
+	#fix acos domain error
+	if (body_rotation_val<=-1):
+		body_rotation_val = -0.999999
+	if (body_rotation_val>=1):
+		body_rotation_val = 0.999999
+	body_rotation = 2*math.asin(body_rotation_val)
+
+	for leg in range(6):
+		Qrx = g_datum[leg][0]*math.cos(body_rotation) - g_datum[leg][1]*math.sin(body_rotation)
+		Qry = g_datum[leg][0]*math.sin(body_rotation) + g_datum[leg][1]*math.cos(body_rotation)
+		gfv[leg][0]= (Qx + Qrx)
+		gfv[leg][1]= (Qy + Qry)
+		foot_vectors[leg][0] = round((gfv[leg][0]-g_datum[leg][0])*math.cos(xlation_angle[leg]) - (gfv[leg][1]-g_datum[leg][1])*math.sin(xlation_angle[leg]),2)
+		foot_vectors[leg][1] = round((gfv[leg][0]-g_datum[leg][0])*math.sin(xlation_angle[leg]) + (gfv[leg][1]-g_datum[leg][1])*math.cos(xlation_angle[leg]),2)
+		foot_vectors[leg][2] = round(((foot_vectors[leg][0]**2)+(foot_vectors[leg][1]**2))**(0.5),2)
+	return foot_vectors
+
+def calc_foot_xyz(i, foot_vectors):
+	for leg in range(6):
+		#access z column of gait csv and multiply it by the magnitude of the foot vector for that leg
+		foot_coordinates[leg][2] = float(gait_array[gait_selected][leg*2][i])*foot_vectors[leg][2]*stride_scale + z_datum
+
+		#access the xy column of the gait csv and multiply it by the x component of the foot vector
+		foot_coordinates[leg][0] = float(gait_array[gait_selected][leg*2+1][i])*foot_vectors[leg][0]*stride_scale + x_datum
+
+		#access the xy column of the gait csv and multiply it by the y component of the foot vector
+		foot_coordinates[leg][1] = float(gait_array[gait_selected][leg*2+1][i])*foot_vectors[leg][1]*stride_scale + y_datum
+	return foot_coordinates
 
 def fixAcos(val):
 	if (val<=-1):
@@ -445,9 +524,13 @@ def fixAcos(val):
 		val = 1
 	return val
 
-#Takes in the desired XYZ components for each leg and outputs the end angles
-def xyz2angles(x,y,z):
+def xyz2angles(coords):
+	#Takes in the desired XYZ components for each leg and outputs the end angles
 	#[beta,theta,alpha] ie shoulder,arm,claw
+	x = coords[0]
+	y = coords[1]
+	z = coords[2]
+	
 	servo_angles = [0,0,0]
 	if(x == 0):
 		x = 0.00001
@@ -490,6 +573,62 @@ def xyz2angles(x,y,z):
 	servo_angles = [0,round(beta*(180/math.pi),0),round(theta*(180/math.pi),0),round(alpha*(180/math.pi),0)]
 	return servo_angles
 
+def walk_module():
+	global walk_idle
+	global gait_selected
+	global gait_select_size
+	global t
+	global foot_vectors
+	global stride_scale
+	global stride_speed
+	
+	#Check for gait selection change
+	if (psc.b_L.pressed == 1) or (psc.b_R.pressed == 1):
+			if psc.b_R.pressed == 1:
+				if gait_selected == 3:
+					gait_selected = 0
+				else:
+					gait_selected = gait_selected + 1
+			if psc.b_L.pressed == 1:
+				if gait_selected == 0:
+					gait_selected = 3
+				else:
+					gait_selected = gait_selected - 1
+			print("Gait Selection changed to: " + str(gait_selected))
+	
+	#if controller inputs change then caluclate foot vectors
+	if (psc.j_Rx.val_changed == 1) or (psc.j_Lx.val_changed == 1) or (psc.j_Ly.val_changed == 1):
+		foot_vectors = calc_foot_vectors(psc.j_Lx.val,psc.j_Ly.val,psc.j_Rx.val)
+		stride_speed = abs(round(psc.j_Rx.val + psc.j_Lx.val + psc.j_Ly.val,0))
+		#msg = "\r	Foot Vector: " + str(Vectors)
+		#sys.stdout.write(msg)
+		#sys.stdout.flush()
+	
+	#check how long inputs have been idle
+	if (psc.j_Rx.val == 0) and (psc.j_Lx.val == 0) and (psc.j_Ly.val == 0):
+		walk_idle = walk_idle + 1
+	else:
+		walk_idle = 0
+	walk_idle_time = round(walk_idle* refresh_rate,2)
+	
+	#if idle time exceeds x seconds, then stand still
+	if walk_idle_time > 8:
+		msg = "\rIdle walk seconds: " + str(walk_idle_time)
+		sys.stdout.write(msg)
+		sys.stdout.flush()
+		#write code to return to standing stance?
+		pass
+	else:
+		if stride_speed != 0:
+			t = int(t + stride_speed)
+			if t == gait_array_size[gait_selected]:
+				t = 0
+			foot_coordinates = calc_foot_xyz(t, foot_vectors)
+			for leg in range(6):
+				servo_angles = xyz2angles(foot_coordinates[leg])
+				for pt in range(1,4):
+					hx.motor[leg+1][pt].move(servo_angles[pt])
+
 def single_leg_module():
 	global leg, x, y, z
 	if psc.b_R.pressed == 1:
@@ -499,10 +638,10 @@ def single_leg_module():
 			leg = leg + 1
 		print("Leg selected: " + str(leg))
 	if (psc.j_Ry.val != 0) or (psc.j_Lx.val != 0) or (psc.j_Ly.val != 0):
-		x = round(x + 0.5*psc.j_Lx.val,1)
-		y = round(y + 0.5*psc.j_Ly.val,1)
-		z = round(z + 0.5*psc.j_Ry.val,1)
-		leg_angles = xyz2angles(x,y,z)
+		x = round(x + 0.1*psc.j_Lx.val,1)
+		y = round(y + 0.1*psc.j_Ly.val,1)
+		z = round(z + 0.1*psc.j_Ry.val,1)
+		leg_angles = xyz2angles([x,y,z])
 		msgxyz = [x,y,z]
 		msg = "\r    leg for x,y,z: " + str(msgxyz) + " angles set to: " + str(leg_angles)
 		sys.stdout.write(msg)
@@ -510,12 +649,51 @@ def single_leg_module():
 		for pt in range(1,4):
 			hx.motor[leg][pt].move(leg_angles[pt])
 
+def servo_config_module():
+	global leg, part, prop, test_angle
+	if psc.b_R.pressed == 1:
+		if leg == 6:
+			leg = 1
+		else:
+			leg = leg + 1
+		print("Leg selected: " + str(leg))
+	if psc.b_up.pressed == 1:
+		if part == 3:
+			part = 1
+		else:
+			part = part + 1
+		print("part selected: " + str(part))
+	if psc.b_down.pressed == 1:
+		if prop == 8:
+			prop = 4
+		else:
+			prop = prop + 1
+		print("Config edit property set to: " + hx.prop_names[prop])
+	
+	if prop == 4 or prop == 5:
+		val = 5
+	else:
+		val = 1	
+	if psc.b_L1.pressed == 1:
+		hx.config_edit(hx.prop_names[prop], leg, part, -val)
+		hx.motor[leg][part].move(test_angle)
+	if psc.b_R1.pressed == 1:
+		hx.config_edit(hx.prop_names[prop], leg, part, val)
+		hx.motor[leg][part].move(test_angle)
+	
+	if psc.j_Lx.val_changed == 1:
+		test_angle = 90 + int(float(psc.j_Lx.val) * 90)
+		test_angle_str = str(test_angle).zfill(3)
+		msg = "\r    Test angle set to: " + test_angle_str
+		sys.stdout.write(msg)
+		sys.stdout.flush()
+		hx.motor[leg][part].move(test_angle)
+
 def main_input_monitor():
 	global exit_main
-	global exit_Servo_Config
-	global exit_single_leg_module
 	global controller_connected
 	global x, y, z
+	global mods
 	
 	#Print button pessed name
 	#for i in range(jsc.btn_num):
@@ -528,38 +706,31 @@ def main_input_monitor():
 		controller_connected = False
 		exit_main = True
 	
+	#Stand
+	#
+	
+	#Lay Down
+	#
+	
+	#Walk
+	#walk_module if no special modules set to RUN
+	if mods.allstopped == True:
+		walk_module()
+	
 	#Triangle
 	#Servo_Config_Module Run or Not
-	if psc.b_tri.pressed == 1 and exit_Servo_Config == False:
-		print("Servo_Config_Module set to exit")
-		exit_Servo_Config = True
-	elif psc.b_tri.pressed == 1 and exit_Servo_Config == True:
-		print("Servo_Config_Module set to start")
-		exit_Servo_Config = False
-		exit_single_leg_module = True
-	if exit_Servo_Config == False and exit_single_leg_module == True:
-		Servo_Config_Module()
+	if psc.b_tri.pressed == 1:
+		mods.start_stop("servo_config")
+	if mods.servo_config == "RUN":
+		servo_config_module()
 	
 	#Circle
 	#single_leg_module Run or Not
-	if psc.b_circle.pressed == 1 and exit_single_leg_module == False:
-		print("single_leg_module set to exit")
-		exit_single_leg_module = True
-	elif psc.b_circle.pressed == 1 and exit_single_leg_module == True:
-		exit_single_leg_module = False
-		exit_Servo_Config = True
-		print("single_leg_module set to start")
-		x_datum = 0
-		y_datum = 5
-		z_datum = -19
-		x = x_datum
-		y = y_datum
-		z = z_datum
-		
-	if exit_single_leg_module == False and exit_Servo_Config == True:
+	if psc.b_circle.pressed == 1:
+		mods.start_stop("single_leg")
+	if mods.single_leg == "RUN":
 		single_leg_module()
-
-
+	
 #Start program
 hexapi_main()
 
