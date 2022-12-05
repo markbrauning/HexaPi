@@ -11,14 +11,8 @@ global controller_connected
 global hx
 global psc
 global jsc
-global exit_main
-global controller_connected
 global refresh_rate
-global exit_Servo_Config
 global leg, part, prop
-global controller_connected
-global jsc
-global psc
 
 #Global Variables
 hx = None

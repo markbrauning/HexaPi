@@ -45,7 +45,15 @@ def bP2gP_xformer():
 	b_4 = np.array([sqrt3/2],	[1/2],	[0],[1])
 	b_5 = np.array([0],			[1],	[0],[1])
 	b_6 = np.array([-sqrt3/2],	[1/2],	[0],[1])
-	
+
+	sqrt3 = m.sqrt(3)
+	L1_b = np.array([sqrt3/2],	[1/2],	[0],[1])
+	L2_b = np.array([0],		[1],	[0],[1))
+	L3_b = np.array([-sqrt3/2],	[1/2],	[0],[1])
+	L4_b = np.array([-sqrt3/2],	[-1/2],	[0],[1])
+	L5_b = np.array([0],		[-1],	[0],[1])
+	L6_b = np.array([sqrt3/2],	[-1/2],	[0],[1])
+		
 	#inputs
 	thx
 	thy
