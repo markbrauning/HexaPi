@@ -318,47 +318,49 @@ def controller_connection():
 
 #-----------------------Math Functions
 def MatScale(Scale):
-	return np.array([[Scale,0,0,0],
+	S = np.array([[Scale,0,0,0],
 					 [0,Scale,0,0],
 					 [0,0,Scale,0],
 					 [0,0,0,1]])
+	return S
 def RotAxis(axis,theta):
 	theta = theta * m.pi/180
 	if axis == "x":
-		R = np.array([[1,0,0,0],
+		RTa = np.array([[1,0,0,0],
 					 [0,m.cos(theta),-m.sin(theta),0],
 					 [0,m.sin(theta),m.cos(theta),0],
 					 [0,0,0,1]])
 	if axis == "y":
-		R = np.array([[m.cos(theta),0,m.sin(theta),0],
+		RTa = np.array([[m.cos(theta),0,m.sin(theta),0],
 					 [0,1,0,0],
 					 [-m.sin(theta),0,m.cos(theta),0],
 					 [0,0,0,1]])
 	if axis == "z":
-		R = np.array([[m.cos(theta),-m.sin(theta),0,0],
+		RTa = np.array([[m.cos(theta),-m.sin(theta),0,0],
 					 [m.sin(theta),m.cos(theta),0,0],
 					 [0,0,1,0],
 					 [0,0,0,1]])
-	return R
-def RotAll(thx,thy,thz):
-	Rx = RotAxis("x",thx)
-	Ry = RotAxis("y",thy)
-	Rz = RotAxis("z",thz)
-	R = multi_dot([Rx,Ry,Rz])
-	return R
-def MovA(Vec):
-	x= Vec[0][0]
-	y= Vec[1][0]
-	z= Vec[2][0]
-	Vec = np.array([[1,0,0,x],
-					[0,1,0,y],
-					[0,0,1,z],
-					[0,0,0,1]])
-	return Vec
-def Xlator(V,MT,thx,thy,thz):
-	#rotate then move = M*R*V
-	P = multi_dot([MovA(MT),RotAll(thx,thy,thz),V])
-	return P
+	return RTa
+def RotAll(R):
+	RTx = RotAxis("x",R[0])
+	RTy = RotAxis("y",R[1])
+	RTz = RotAxis("z",R[2])
+	RT = multi_dot([RTx,RTy,RTz])
+	return RT
+def MovA(M):
+	MT = np.array([[1,0,0,M[0][0]],
+				   [0,1,0,M[1][0]],
+				   [0,0,1,M[2][0]],
+				   [0,0,0,1]])
+	return MT
+def Xlator(P1,M,R):
+	#P2 = R*P1+MT
+	P2 = multi_dot([MovA(M),RotAll(R),P1])
+	return P2
+def Xtlator2x(P_L, M_gtob, R_gtob, M_btoL, R_btoL):
+	#P_g = RT_gtob * RT_btoL * P_L + RT_btog * M_btoL + M_gtob
+	P_g = np.add(np.add(multi_dot([RotAll(R_gtob),RotAll(R_btoL),P_L]),np.dot(RotAll(R_gtob),M_btoL)),M_gtoB)
+	return P_g
 
 #-----------------------Pygame Functions
 def txt(msg,color,row,col,screen,font_style):
@@ -382,6 +384,25 @@ def cordy(pos):
 	scn_offset_y = HEIGHT/2
 	y=int(-scn_offset_y+HEIGHT-pos)
 	return y
+
+def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordscale,coordcolor,screen,font_style):
+	#Translate coordinate to screen coordinates
+	orgn= cord([origin[0],origin[1]])
+	xax= cord([xaxis[0]*coordscale,xaxis[1]*coordscale])
+	yax= cord([yaxis[0]*coordscale,yaxis[1]*coordscale])
+	zax= cord([zaxis[0]*coordscale,zaxis[1]*coordscale])
+	
+	#draw axes
+	pygame.draw.line(screen,coordcolor,orgn,xax,2)
+	pygame.draw.line(screen,coordcolor,orgn,yax,2)
+	pygame.draw.line(screen,coordcolor,orgn,zax,2)
+	
+	#Axes and Origin labels
+	txt2d("x",coordcolor,xax,screen,font_style)
+	txt2d("y",coordcolor,yax,screen,font_style)
+	txt2d("z",coordcolor,zax,screen,font_style)
+	txt2d(coordname,coordcolor,orgn,screen,font_style)
+
 def xycoord(coordname,RotAboutG,MovRel2G,coordscale,coordcolor,screen,font_style):
 	#RotAboutG: [thx,thy,thz]
 	#MovRel2G:  [[x],[y],[z],[1]]
@@ -430,7 +451,8 @@ def hexapi_main():
 	jsc = None
 	exit_main = False
 	controller_connected = False
-	refresh_rate = 0.01
+	refresh_rate = 0.05
+	proctime = 0
 	mods = module_select()
 	stride_speed = 0
 	walk_idle = 0
@@ -447,54 +469,49 @@ def hexapi_main():
 	font_style = pygame.font.SysFont(None, 20)
 	screen.fill(white)
 	
-	#-----------------------Body Coordinate systems relative to global (Changed by Controller inputs)
-	bx_g = 0
-	by_g = 0
-	bz_g = 0
-	b_g = np.array([[bx_g],[by_g],[bz_g],[1]])
-	bthx_g = 0
-	bthy_g = 0
-	bthz_g = 0
-	br_g = [bthx_g,bthy_g,bthz_g]
+	#-----------------------Define Axes
+	origin = np.array([[0],[0],[0],[1]])
+	xaxis  = np.array([[1],[0],[0],[1]])
+	yaxis  = np.array([[0],[1],[0],[1]])
+	zaxis  = np.array([[0],[0],[1],[1]])
+	
+	#-----------------------Body Origin relative to global (Changed by Controller inputs)
+	M_gtob = np.array([[50],[50],[0],[1]])
+	R_gtob = [0,0,0]
 
-	#-----------------------Leg Coordinate systems relative to Body (CONSTANT)
+	#-----------------------Leg Origins relative to Body (CONSTANT)
 	BodyR = 100
 	sqrt3 = m.sqrt(3)
-	L1_b = np.array([[BodyR*sqrt3/2],	[BodyR*1/2],	[0],[1]])
-	L2_b = np.array([[BodyR*0],			[BodyR*1],		[0],[1]])
-	L3_b = np.array([[BodyR*-sqrt3/2],	[BodyR*1/2],	[0],[1]])
-	L4_b = np.array([[BodyR*-sqrt3/2],	[BodyR*-1/2],	[0],[1]])
-	L5_b = np.array([[BodyR*0],			[BodyR*-1],		[0],[1]])
-	L6_b = np.array([[BodyR*sqrt3/2],	[BodyR*-1/2],	[0],[1]])
+	M_btoL1 = np.array([[BodyR*sqrt3/2],	[BodyR*1/2],	[0],[1]])
+	M_btoL2 = np.array([[BodyR*0],			[BodyR*1],		[0],[1]])
+	M_btoL3 = np.array([[BodyR*-sqrt3/2],	[BodyR*1/2],	[0],[1]])
+	M_btoL4 = np.array([[BodyR*-sqrt3/2],	[BodyR*-1/2],	[0],[1]])
+	M_btoL5 = np.array([[BodyR*0],			[BodyR*-1],		[0],[1]])
+	M_btoL6 = np.array([[BodyR*sqrt3/2],	[BodyR*-1/2],	[0],[1]])
 
-	L1r_b = [0,0,-60]
-	L2r_b = [0,0,0]
-	L3r_b = [0,0,60]
-	L4r_b = [0,0,120]
-	L5r_b = [0,0,180]
-	L6r_b = [0,0,240]
+	R_btoL1 = [0,0,-60]
+	R_btoL2 = [0,0,0]
+	R_btoL3 = [0,0,60]
+	R_btoL4 = [0,0,120]
+	R_btoL5 = [0,0,180]
+	R_btoL6 = [0,0,240]
 
-	L_b = np.array([L1_b,L2_b,L3_b,L4_b,L5_b,L6_b])
-	Lr_b = np.array([L1r_b,L2r_b,L3r_b,L4r_b,L5r_b,L6r_b])
-
-	#-----------------------Leg Coordinate systems relative to Global
-	LNull_g = np.array([[0],[0],[0],[1]])
-	L_g = np.array([LNull_g,LNull_g,LNull_g,LNull_g,LNull_g,LNull_g])
-	for leg in range(6):
-		L_g[leg] = Xlator(L_b[leg],b_g,br_g[0],br_g[1],br_g[2])
+	M_btoL = np.array([M_btoL1,M_btoL2,M_btoL3,M_btoL4,M_btoL5,M_btoL6])
+	R_btoL = np.array([R_btoL1,R_btoL2,R_btoL3,R_btoL4,R_btoL5,R_btoL6])
 	
 	#Main Loop
 	while not exit_main:
 		#Monitor Loop
 		while controller_connected:
-			time.sleep(refresh_rate)
+			if proctime > refresh_rate:
+				proctime = refresh_rate
+			time.sleep(refresh_rate-proctime)
 			tic = time.perf_counter()
 			
 			#Try to update controller input and status values
 			prev_psc = psc
 			try:
 				psc = psc_update(prev_psc, refresh_rate, jsc)
-				
 			except:
 				psc = prev_psc
 			
@@ -503,35 +520,34 @@ def hexapi_main():
 			
 			#-----------------------Pygame Stuff
 			screen.fill(white)
-			#Global Coords:
-			xycoord("g",[0,0,0],[[0],[0],[0],[1]],50,red,screen,font_style)
+			#Draw Global Coords:
+			DrawxyzCoord("g",origin,xaxis,yaxis,zaxis,50,red,screen,font_style)
 			
-			#Body Coordinate systems relative to global (Changed by Controller inputs)
-			bx_g = bx_g + 3*psc.j_Lx.val
-			by_g = by_g - 3*psc.j_Ly.val
-			bz_g = 0
-			b_g = np.array([[bx_g],[by_g],[bz_g],[1]])
-			bthx_g = 0
-			bthy_g = 0
-			bthz_g = bthz_g - 3*psc.j_Rx.val
-			br_g = [bthx_g,bthy_g,bthz_g]
 			
-			#Body Coords:
-			xycoord("b",br_g,b_g,35,seagreen,screen,font_style)
+			#Update Body coord translators with controller inputs:
+			M_gtob[0][0] = M_gtob[0][0] + 5*psc.j_Lx.val
+			M_gtob[1][0] = M_gtob[1][0] + 5*psc.j_Ly.val
+			R_gtob[2] = R_gtob[2] + 5*psc.j_Rx.val
+			
+			#Draw Body Coords:
+			b_origin = Xlator(origin,M_gtob,R_gtob)
+			b_xaxis = Xlator(xaxis,M_gtob,R_gtob)
+			b_yaxis = Xlator(yaxis,M_gtob,R_gtob)
+			b_zaxis = Xlator(zaxis,M_gtob,R_gtob)
+			DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,50,red,screen,font_style)
 			
 			#Leg Coords
 			for leg in range(6):
 				axName = "L"+str(leg+1)
-				L_g[leg] = Xlator(L_b[leg],b_g,br_g[0],br_g[1],br_g[2])
-				xycoord(axName,Lr_b[leg],L_g[leg],20,blue,screen,font_style)
 				
 			#pygame.draw.rect(screen,blue,[cordx(x),cordy(y),5,5])
 			toc = time.perf_counter()
-			if (toc - tic) > refresh_rate:
+			proctime = toc - tic
+			if proctime > refresh_rate:
 				txt("Lagging!",red,48,4,screen,font_style)
 				#print(f"Main loop is lagging and took : {toc - tic:0.5f} seconds to complete.")
 			txt("Refresh rate: "+ str(refresh_rate),black,47,0,screen,font_style)	
-			txt(f"Main loop took : {toc - tic:0.6f} seconds to complete.",black,48,0,screen,font_style)
+			txt(f"Main loop took : {proctime:0.6f} seconds to complete.",black,48,0,screen,font_style)
 			#Print off controller button/joy valus:
 			for i in range(jsc.ax_num):
 				txt(psc.ax[i].name,black,i,3,screen,font_style)
