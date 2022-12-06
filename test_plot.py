@@ -19,8 +19,8 @@ psc = None
 
 #Pygame global vars:
 global HEIGHT, WIDTH
-HEIGHT = 750
-WIDTH = 750
+HEIGHT = 1000
+WIDTH = 1000
 global purple, blue, red, white, black, seagreen
 purple = (100,0,255)
 blue=(0,0,255)
@@ -357,9 +357,19 @@ def Xlator(P1,M,R):
 	#P2 = R*P1+MT
 	P2 = multi_dot([MovA(M),RotAll(R),P1])
 	return P2
-def Xtlator2x(P_L, M_gtob, R_gtob, M_btoL, R_btoL):
+def Xlator2x(P_L, M_gtob, R_gtob, M_btoL, R_btoL):
 	#P_g = RT_gtob * RT_btoL * P_L + RT_btog * M_btoL + M_gtob
-	P_g = np.add(np.add(multi_dot([RotAll(R_gtob),RotAll(R_btoL),P_L]),np.dot(RotAll(R_gtob),M_btoL)),M_gtoB)
+	P_g = np.add(np.add(multi_dot([RotAll(R_gtob),RotAll(R_btoL),P_L]),np.dot(RotAll(R_gtob),M_btoL)),M_gtob)
+	return P_g
+def Xlator3x(P_D, M_gtob, R_gtob, M_btoL, R_btoL,M_LtoD, R_LtoD):
+	RT0 = RotAll(R_gtob)
+	RT1 = RotAll(R_btoL)
+	RT2 = RotAll(R_LtoD)
+	M0 = M_gtob
+	M1 = M_btoL
+	M2 = M_LtoD
+	#P_g = (RT0*RT1*RT2*P_D)+(RT0*RT1*M2)+(RT0*M1)+M0
+	P_g = np.add(np.add(np.add(multi_dot([RT0,RT1,RT2,P_D]),multi_dot([RT0,RT1,M2])),multi_dot([RT0,M1])),M0)
 	return P_g
 
 #-----------------------Pygame Functions
@@ -369,28 +379,20 @@ def txt(msg,color,row,col,screen,font_style):
 	screen.blit(mesg, pos)
 def txt2d(msg,color,pos,screen,font_style):
 	mesg = font_style.render(msg, True, color)
-	screen.blit(mesg, cord(pos))
+	screen.blit(mesg, pos)
 def cord(pos):
 	scn_offset_x = WIDTH/2
 	scn_offset_y = HEIGHT/2
 	x=int(scn_offset_x+pos[0])
 	y=int(-scn_offset_y+HEIGHT-pos[1])
 	return [x,y]
-def cordx(pos):
-	scn_offset_x = WIDTH/2
-	x=int(scn_offset_x+pos)
-	return x
-def cordy(pos):
-	scn_offset_y = HEIGHT/2
-	y=int(-scn_offset_y+HEIGHT-pos)
-	return y
 
-def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordscale,coordcolor,screen,font_style):
+def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordcolor,screen,font_style):
 	#Translate coordinate to screen coordinates
-	orgn= cord([origin[0],origin[1]])
-	xax= cord([xaxis[0]*coordscale,xaxis[1]*coordscale])
-	yax= cord([yaxis[0]*coordscale,yaxis[1]*coordscale])
-	zax= cord([zaxis[0]*coordscale,zaxis[1]*coordscale])
+	orgn= cord([origin[0][0],origin[1][0]])
+	xax= cord([xaxis[0][0],xaxis[1][0]])
+	yax= cord([yaxis[0][0],yaxis[1][0]])
+	zax= cord([zaxis[0][0],zaxis[1][0]])
 	
 	#draw axes
 	pygame.draw.line(screen,coordcolor,orgn,xax,2)
@@ -400,39 +402,18 @@ def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordscale,coordcolor,screen
 	#Axes and Origin labels
 	txt2d("x",coordcolor,xax,screen,font_style)
 	txt2d("y",coordcolor,yax,screen,font_style)
-	txt2d("z",coordcolor,zax,screen,font_style)
+	txt2d("",coordcolor,zax,screen,font_style)
 	txt2d(coordname,coordcolor,orgn,screen,font_style)
+	
+def DrawFoot(leg,pos,screen,footcolor,font_style):
+	posxy = cord([pos[0][0],pos[1][0]])
+	pygame.draw.rect(screen,footcolor,[posxy[0],posxy[1],8,8])
+	txt2d("F"+str(leg),footcolor,posxy,screen,font_style)
+	
+def DrawLimitSphere(Radius,centerxyz,screen,limcolor):
+	centerxy = cord([centerxyz[0][0],centerxyz[1][0]])
+	pygame.draw.circle(screen,limcolor,centerxy,Radius,1)
 
-def xycoord(coordname,RotAboutG,MovRel2G,coordscale,coordcolor,screen,font_style):
-	#RotAboutG: [thx,thy,thz]
-	#MovRel2G:  [[x],[y],[z],[1]]
-	
-	#def axis lines with scaling
-	x0 = np.array([[0],[0],[0],[1]])
-	x = np.array([[1*coordscale],[0],[0],[1]])
-	y0 = np.array([[0],[0],[0],[1]])
-	y = np.array([[0],[1*coordscale],[0],[1]])
-	
-	#rotate then move
-	x0_G = Xlator(x0,MovRel2G,RotAboutG[0],RotAboutG[1],RotAboutG[2])
-	x_G = Xlator(x,MovRel2G,RotAboutG[0],RotAboutG[1],RotAboutG[2])
-	y0_G = Xlator(y0,MovRel2G,RotAboutG[0],RotAboutG[1],RotAboutG[2])
-	y_G = Xlator(y,MovRel2G,RotAboutG[0],RotAboutG[1],RotAboutG[2])
-	
-	#[x,y]
-	pos_x0_G = [x0_G[0][0],x0_G[1][0]]
-	pos_x_G = [x_G[0][0],x_G[1][0]]
-	pos_y0_G = [y0_G[0][0],y0_G[1][0]]
-	pos_y_G = [y_G[0][0],y_G[1][0]]
-	
-	#draw X axis
-	pygame.draw.line(screen,coordcolor,cord(pos_x0_G),cord(pos_x_G),2)
-	pygame.draw.line(screen,coordcolor,cord(pos_y0_G),cord(pos_y_G),2)
-	
-	#Axis and Origin labels
-	txt2d("x",coordcolor,[pos_x_G[0]+5,pos_x_G[1]+7],screen,font_style)
-	txt2d("y",coordcolor,[pos_y_G[0]-2,pos_y_G[1]+15],screen,font_style)
-	txt2d(coordname,coordcolor,[pos_x0_G[0]-3,pos_x0_G[1]-3],screen,font_style)
 
 def hexapi_main():
 	#Global Variables:
@@ -451,7 +432,7 @@ def hexapi_main():
 	jsc = None
 	exit_main = False
 	controller_connected = False
-	refresh_rate = 0.05
+	refresh_rate = 0.1
 	proctime = 0
 	mods = module_select()
 	stride_speed = 0
@@ -476,6 +457,7 @@ def hexapi_main():
 	zaxis  = np.array([[0],[0],[1],[1]])
 	
 	#-----------------------Body Origin relative to global (Changed by Controller inputs)
+	walkspeed = 2
 	M_gtob = np.array([[50],[50],[0],[1]])
 	R_gtob = [0,0,0]
 
@@ -499,6 +481,20 @@ def hexapi_main():
 	M_btoL = np.array([M_btoL1,M_btoL2,M_btoL3,M_btoL4,M_btoL5,M_btoL6])
 	R_btoL = np.array([R_btoL1,R_btoL2,R_btoL3,R_btoL4,R_btoL5,R_btoL6])
 	
+	#-----------------------Foot Datum relative to Leg (CONSTANT)
+	limcolor = black
+	FootRangeRadius = 45
+	FootDatumRadius = 40 #relative to leg origin
+	M_LtoD = np.array([[0],[FootDatumRadius*1],[0],[1]])
+	R_LtoD = [0,0,0]
+	P_D = M_LtoD
+	
+	#-----------------------Draw feet
+	zeros = np.array([[0],[0],[0],[0]])
+	FootPos = np.array([zeros,zeros,zeros,zeros,zeros,zeros])
+	for leg in range(6):
+		FootPos[leg] = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
+	
 	#Main Loop
 	while not exit_main:
 		#Monitor Loop
@@ -521,26 +517,51 @@ def hexapi_main():
 			#-----------------------Pygame Stuff
 			screen.fill(white)
 			#Draw Global Coords:
-			DrawxyzCoord("g",origin,xaxis,yaxis,zaxis,50,red,screen,font_style)
+			g_coordscale = 75
+			g_xaxis = np.dot(MatScale(g_coordscale),xaxis)
+			g_yaxis = np.dot(MatScale(g_coordscale),yaxis)
+			g_zaxis = np.dot(MatScale(g_coordscale),zaxis)
+			DrawxyzCoord("g",origin,g_xaxis,g_yaxis,g_zaxis,red,screen,font_style)
 			
 			
 			#Update Body coord translators with controller inputs:
-			M_gtob[0][0] = M_gtob[0][0] + 5*psc.j_Lx.val
-			M_gtob[1][0] = M_gtob[1][0] + 5*psc.j_Ly.val
-			R_gtob[2] = R_gtob[2] + 5*psc.j_Rx.val
+			M_gtob[0][0] = M_gtob[0][0] + int(walkspeed*psc.j_Lx.val)
+			M_gtob[1][0] = M_gtob[1][0] - int(walkspeed*psc.j_Ly.val)
+			R_gtob[1] = R_gtob[1] - int(walkspeed*psc.j_Ry.val)
+			R_gtob[2] = R_gtob[2] - int(walkspeed*psc.j_Rx.val)
+			txt("M_gtob: " + str(M_gtob),black,0,0,screen,font_style)
+			txt("R_gtob: " + str(R_gtob),black,1,0,screen,font_style)
 			
 			#Draw Body Coords:
+			b_coordscale = 50
 			b_origin = Xlator(origin,M_gtob,R_gtob)
-			b_xaxis = Xlator(xaxis,M_gtob,R_gtob)
-			b_yaxis = Xlator(yaxis,M_gtob,R_gtob)
-			b_zaxis = Xlator(zaxis,M_gtob,R_gtob)
-			DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,50,red,screen,font_style)
+			b_xaxis = Xlator(np.dot(MatScale(b_coordscale),xaxis),M_gtob,R_gtob)
+			b_yaxis = Xlator(np.dot(MatScale(b_coordscale),yaxis),M_gtob,R_gtob)
+			b_zaxis = Xlator(np.dot(MatScale(b_coordscale),zaxis),M_gtob,R_gtob)
+			DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,seagreen,screen,font_style)
 			
 			#Leg Coords
+			L_coordscale = 35
 			for leg in range(6):
 				axName = "L"+str(leg+1)
+				L_origin= Xlator2x(origin,M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+				L_xaxis = Xlator2x(np.dot(MatScale(L_coordscale),xaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+				L_yaxis = Xlator2x(np.dot(MatScale(L_coordscale),yaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+				L_zaxis = Xlator2x(np.dot(MatScale(L_coordscale),zaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+				DrawxyzCoord(axName,L_origin,L_xaxis,L_yaxis,L_zaxis,blue,screen,font_style)
+				#DrawLimits:
+				DatumPos = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
+				DrawLimitSphere(FootRangeRadius,DatumPos,screen,limcolor)
+				#Draw Feet:
+				FTdistVec = np.subtract(FootPos[leg],DatumPos) #foot distance from datum Vector
+				FTdist = m.sqrt(((FTdistVec[0][0])**2)+((FTdistVec[1][0])**2)+((FTdistVec[2][0])**2)) #Scalar
+				if FTdist > FootRangeRadius:
+					FootPos[leg] = DatumPos
+				DrawFoot(leg,FootPos[leg],screen,purple,font_style)
 				
-			#pygame.draw.rect(screen,blue,[cordx(x),cordy(y),5,5])
+				
+			
+			
 			toc = time.perf_counter()
 			proctime = toc - tic
 			if proctime > refresh_rate:
