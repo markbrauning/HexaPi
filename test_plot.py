@@ -29,6 +29,7 @@ white=(255,255,255)
 black=(0,0,0)
 seagreen=(32,178,170)
 
+#-----------------------Controller Classes
 class controller_class:
 	def __init__(self,i):
 		self.ctrl = pygame.joystick.Joystick(i)
@@ -76,7 +77,6 @@ class controller_class:
 		elif ctrl_name == "Wireless Controller":
 			ctrl_mapping = [PS4_mapping,PS4_mapping_name]
 		return ctrl_mapping
-
 class psc_update:
 	def __init__(self, prev_psc, refresh_rate, jsc):
 		idle_toggle = True
@@ -225,7 +225,6 @@ class psc_update:
 				self.released = 1
 			else:
 				self.released = 0
-
 class module_select:
 	def __init__(self):
 		functions = ["Sim_Walk_module"]
@@ -250,6 +249,7 @@ class module_select:
 			if val == "RUN":
 				self.allstopped = False
 
+#-----------------------Controller Functions
 def controller_connection():
 	global controller_connected
 	global jsc
@@ -373,11 +373,13 @@ def Xlator3x(P_D, M_gtob, R_gtob, M_btoL, R_btoL,M_LtoD, R_LtoD):
 	return P_g
 
 #-----------------------Pygame Functions
-def txt(msg,color,row,col,screen,font_style):
+def txt(msg,color,row,col,screen,font_size):
+	font_style = pygame.font.SysFont(None, font_size)
 	pos = cord([-(WIDTH/2)+col*100,(HEIGHT/2)-row*15])
 	mesg = font_style.render(msg, True, color)
 	screen.blit(mesg, pos)
-def txt2d(msg,color,pos,screen,font_style):
+def txt2d(msg,color,pos,screen,font_size):
+	font_style = pygame.font.SysFont(None, font_size)
 	mesg = font_style.render(msg, True, color)
 	screen.blit(mesg, pos)
 def cord(pos):
@@ -386,8 +388,7 @@ def cord(pos):
 	x=int(scn_offset_x+pos[0])
 	y=int(-scn_offset_y+HEIGHT-pos[1])
 	return [x,y]
-
-def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordcolor,screen,font_style):
+def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordcolor,screen,font_size):
 	#Translate coordinate to screen coordinates
 	orgn= cord([origin[0][0],origin[1][0]])
 	xax= cord([xaxis[0][0],xaxis[1][0]])
@@ -400,21 +401,19 @@ def DrawxyzCoord(coordname,origin,xaxis,yaxis,zaxis,coordcolor,screen,font_style
 	pygame.draw.line(screen,coordcolor,orgn,zax,2)
 	
 	#Axes and Origin labels
-	txt2d("x",coordcolor,xax,screen,font_style)
-	txt2d("y",coordcolor,yax,screen,font_style)
-	txt2d("",coordcolor,zax,screen,font_style)
-	txt2d(coordname,coordcolor,orgn,screen,font_style)
-	
-def DrawFoot(leg,pos,screen,footcolor,font_style):
+	txt2d("x",coordcolor,xax,screen,font_size)
+	txt2d("y",coordcolor,yax,screen,font_size)
+	txt2d("",coordcolor,zax,screen,font_size)
+	txt2d(coordname,coordcolor,orgn,screen,font_size)	
+def DrawFoot(leg,pos,screen,footcolor,font_size):
 	posxy = cord([pos[0][0],pos[1][0]])
 	pygame.draw.rect(screen,footcolor,[posxy[0],posxy[1],8,8])
-	txt2d("F"+str(leg),footcolor,posxy,screen,font_style)
-	
+	txt2d("F"+str(leg),footcolor,posxy,screen,font_size)
 def DrawLimitSphere(Radius,centerxyz,screen,limcolor):
 	centerxy = cord([centerxyz[0][0],centerxyz[1][0]])
 	pygame.draw.circle(screen,limcolor,centerxy,Radius,1)
 
-
+#-----------------------Main Program
 def hexapi_main():
 	#Global Variables:
 	global psc
@@ -423,7 +422,6 @@ def hexapi_main():
 	global controller_connected
 	global refresh_rate
 	global mods
-	global t
 	global stride_speed
 	global walk_idle
 	
@@ -444,24 +442,27 @@ def hexapi_main():
 	controller_connection_thread.start()
 	
 	#-----------------------Pygame Setup
+	global screen
 	pygame.init()
 	screen = pygame.display.set_mode((WIDTH, HEIGHT))
 	pygame.display.set_caption("HexaPi")
-	font_style = pygame.font.SysFont(None, 20)
 	screen.fill(white)
 	
-	#-----------------------Define Axes
+	#-----------------------Define Axes for pygame
+	global origin,xaxis,yaxis,zaxis
 	origin = np.array([[0],[0],[0],[1]])
 	xaxis  = np.array([[1],[0],[0],[1]])
 	yaxis  = np.array([[0],[1],[0],[1]])
 	zaxis  = np.array([[0],[0],[1],[1]])
 	
 	#-----------------------Body Origin relative to global (Changed by Controller inputs)
-	walkspeed = 2
+	global strideboost,M_gtob,R_gtob
+	strideboost= 2
 	M_gtob = np.array([[50],[50],[0],[1]])
 	R_gtob = [0,0,0]
 
 	#-----------------------Leg Origins relative to Body (CONSTANT)
+	global M_btoL,R_btoL
 	BodyR = 100
 	sqrt3 = m.sqrt(3)
 	M_btoL1 = np.array([[BodyR*sqrt3/2],	[BodyR*1/2],	[0],[1]])
@@ -470,39 +471,38 @@ def hexapi_main():
 	M_btoL4 = np.array([[BodyR*-sqrt3/2],	[BodyR*-1/2],	[0],[1]])
 	M_btoL5 = np.array([[BodyR*0],			[BodyR*-1],		[0],[1]])
 	M_btoL6 = np.array([[BodyR*sqrt3/2],	[BodyR*-1/2],	[0],[1]])
-
 	R_btoL1 = [0,0,-60]
 	R_btoL2 = [0,0,0]
 	R_btoL3 = [0,0,60]
 	R_btoL4 = [0,0,120]
 	R_btoL5 = [0,0,180]
 	R_btoL6 = [0,0,240]
-
 	M_btoL = np.array([M_btoL1,M_btoL2,M_btoL3,M_btoL4,M_btoL5,M_btoL6])
 	R_btoL = np.array([R_btoL1,R_btoL2,R_btoL3,R_btoL4,R_btoL5,R_btoL6])
 	
-	#-----------------------Foot Datum relative to Leg (CONSTANT)
-	limcolor = black
+	#-----------------------Foot Datum Origin relative to Leg (CONSTANT)
+	global FootRangeRadius,M_LtoD,R_LtoD,P_D
 	FootRangeRadius = 45
 	FootDatumRadius = 40 #relative to leg origin
 	M_LtoD = np.array([[0],[FootDatumRadius*1],[0],[1]])
 	R_LtoD = [0,0,0]
 	P_D = M_LtoD
 	
-	#-----------------------Draw feet
+	#-----------------------Define feet position (initial on datum)
+	global F_g
 	zeros = np.array([[0],[0],[0],[0]])
-	FootPos = np.array([zeros,zeros,zeros,zeros,zeros,zeros])
+	F_g = np.array([zeros,zeros,zeros,zeros,zeros,zeros])
 	for leg in range(6):
-		FootPos[leg] = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
+		F_g[leg] = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
 	
-	#Main Loop
+	#-----------------------Main Loop
 	while not exit_main:
-		#Monitor Loop
 		while controller_connected:
 			if proctime > refresh_rate:
 				proctime = refresh_rate
 			time.sleep(refresh_rate-proctime)
 			tic = time.perf_counter()
+			screen.fill(white)
 			
 			#Try to update controller input and status values
 			prev_psc = psc
@@ -514,65 +514,18 @@ def hexapi_main():
 			#run primary functions
 			main_input_monitor()
 			
-			#-----------------------Pygame Stuff
-			screen.fill(white)
-			#Draw Global Coords:
-			g_coordscale = 75
-			g_xaxis = np.dot(MatScale(g_coordscale),xaxis)
-			g_yaxis = np.dot(MatScale(g_coordscale),yaxis)
-			g_zaxis = np.dot(MatScale(g_coordscale),zaxis)
-			DrawxyzCoord("g",origin,g_xaxis,g_yaxis,g_zaxis,red,screen,font_style)
-			
-			
-			#Update Body coord translators with controller inputs:
-			M_gtob[0][0] = M_gtob[0][0] + int(walkspeed*psc.j_Lx.val)
-			M_gtob[1][0] = M_gtob[1][0] - int(walkspeed*psc.j_Ly.val)
-			R_gtob[1] = R_gtob[1] - int(walkspeed*psc.j_Ry.val)
-			R_gtob[2] = R_gtob[2] - int(walkspeed*psc.j_Rx.val)
-			txt("M_gtob: " + str(M_gtob),black,0,0,screen,font_style)
-			txt("R_gtob: " + str(R_gtob),black,1,0,screen,font_style)
-			
-			#Draw Body Coords:
-			b_coordscale = 50
-			b_origin = Xlator(origin,M_gtob,R_gtob)
-			b_xaxis = Xlator(np.dot(MatScale(b_coordscale),xaxis),M_gtob,R_gtob)
-			b_yaxis = Xlator(np.dot(MatScale(b_coordscale),yaxis),M_gtob,R_gtob)
-			b_zaxis = Xlator(np.dot(MatScale(b_coordscale),zaxis),M_gtob,R_gtob)
-			DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,seagreen,screen,font_style)
-			
-			#Leg Coords
-			L_coordscale = 35
-			for leg in range(6):
-				axName = "L"+str(leg+1)
-				L_origin= Xlator2x(origin,M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
-				L_xaxis = Xlator2x(np.dot(MatScale(L_coordscale),xaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
-				L_yaxis = Xlator2x(np.dot(MatScale(L_coordscale),yaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
-				L_zaxis = Xlator2x(np.dot(MatScale(L_coordscale),zaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
-				DrawxyzCoord(axName,L_origin,L_xaxis,L_yaxis,L_zaxis,blue,screen,font_style)
-				#DrawLimits:
-				DatumPos = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
-				DrawLimitSphere(FootRangeRadius,DatumPos,screen,limcolor)
-				#Draw Feet:
-				FTdistVec = np.subtract(FootPos[leg],DatumPos) #foot distance from datum Vector
-				FTdist = m.sqrt(((FTdistVec[0][0])**2)+((FTdistVec[1][0])**2)+((FTdistVec[2][0])**2)) #Scalar
-				if FTdist > FootRangeRadius:
-					FootPos[leg] = DatumPos
-				DrawFoot(leg,FootPos[leg],screen,purple,font_style)
-				
-				
-			
 			
 			toc = time.perf_counter()
 			proctime = toc - tic
 			if proctime > refresh_rate:
 				txt("Lagging!",red,48,4,screen,font_style)
 				#print(f"Main loop is lagging and took : {toc - tic:0.5f} seconds to complete.")
-			txt("Refresh rate: "+ str(refresh_rate),black,47,0,screen,font_style)	
-			txt(f"Main loop took : {proctime:0.6f} seconds to complete.",black,48,0,screen,font_style)
+			txt("Refresh rate: "+ str(refresh_rate),black,47,0,screen,20)	
+			txt(f"Main loop took : {proctime:0.6f} seconds to complete.",black,48,0,screen,20)
 			#Print off controller button/joy valus:
 			for i in range(jsc.ax_num):
-				txt(psc.ax[i].name,black,i,3,screen,font_style)
-				txt(str(psc.ax[i].val),black,i,5,screen,font_style)
+				txt(psc.ax[i].name,black,i,3,screen,20)
+				txt(str(psc.ax[i].val),black,i,5,screen,20)
 			pygame.display.update()
 		time.sleep(0.5)
 	print("End of hexapi_main code.")
@@ -584,6 +537,50 @@ def Sim_Walk_module():
 	global t
 	global foot_vectors
 	global stride_speed
+	
+	#-----------------------Pygame Stuff
+	#Draw Global Coords:
+	g_coordscale = 75
+	g_xaxis = np.dot(MatScale(g_coordscale),xaxis)
+	g_yaxis = np.dot(MatScale(g_coordscale),yaxis)
+	g_zaxis = np.dot(MatScale(g_coordscale),zaxis)
+	DrawxyzCoord("g",origin,g_xaxis,g_yaxis,g_zaxis,red,screen,20)
+	
+	
+	#Update Body coord translators with controller inputs:
+	M_gtob[0][0] = M_gtob[0][0] + int(strideboost*psc.j_Lx.val)
+	M_gtob[1][0] = M_gtob[1][0] - int(strideboost*psc.j_Ly.val)
+	#R_gtob[1] = R_gtob[1] - int(strideboost*psc.j_Ry.val)
+	R_gtob[2] = R_gtob[2] - int(strideboost*psc.j_Rx.val)
+	txt("M_gtob: " + str(M_gtob),black,0,0,screen,20)
+	txt("R_gtob: " + str(R_gtob),black,1,0,screen,20)
+	
+	#Draw Body Coords:
+	b_coordscale = 50
+	b_origin = Xlator(origin,M_gtob,R_gtob)
+	b_xaxis = Xlator(np.dot(MatScale(b_coordscale),xaxis),M_gtob,R_gtob)
+	b_yaxis = Xlator(np.dot(MatScale(b_coordscale),yaxis),M_gtob,R_gtob)
+	b_zaxis = Xlator(np.dot(MatScale(b_coordscale),zaxis),M_gtob,R_gtob)
+	DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,seagreen,screen,20)
+	
+	#Leg Coords
+	L_coordscale = 35
+	for leg in range(6):
+		axName = "L"+str(leg+1)
+		L_origin= Xlator2x(origin,M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+		L_xaxis = Xlator2x(np.dot(MatScale(L_coordscale),xaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+		L_yaxis = Xlator2x(np.dot(MatScale(L_coordscale),yaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+		L_zaxis = Xlator2x(np.dot(MatScale(L_coordscale),zaxis),M_gtob,R_gtob,M_btoL[leg],R_btoL[leg])
+		DrawxyzCoord(axName,L_origin,L_xaxis,L_yaxis,L_zaxis,blue,screen,20)
+		#DrawLimits:
+		DatumPos = Xlator3x(P_D, M_gtob, R_gtob, M_btoL[leg], R_btoL[leg], M_LtoD, R_LtoD)
+		DrawLimitSphere(FootRangeRadius,DatumPos,screen,black)
+		#Draw Feet:
+		FTdistVec = np.subtract(F_g[leg],DatumPos) #foot distance from datum Vector
+		FTdist = m.sqrt(((FTdistVec[0][0])**2)+((FTdistVec[1][0])**2)+((FTdistVec[2][0])**2)) #Scalar
+		if FTdist > FootRangeRadius:
+			F_g[leg] = DatumPos
+		DrawFoot(leg,F_g[leg],screen,purple,20)
 	
 	#if controller inputs change then caluclate stride speed
 	if (psc.j_Rx.val_changed == 1) or (psc.j_Lx.val_changed == 1) or (psc.j_Ly.val_changed == 1):
@@ -626,6 +623,10 @@ def main_input_monitor():
 		mods.start_stop("Sim_Walk_module")
 	if mods.Sim_Walk_module == "RUN":
 		Sim_Walk_module()
-
+	if mods.Sim_Walk_module == "STOP":
+		txt("Press the Triangle button to start Simulator",black,20,0,screen,40)
+		
+	#All stopped
+	
 #Start program
 hexapi_main()
