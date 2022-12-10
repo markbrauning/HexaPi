@@ -732,10 +732,27 @@ def main_input_monitor():
 		single_leg_module()
 	
 #Start program
-hexapi_main()
+#hexapi_main()
+
+import numpy as np
+def read_in_gaits():
+	print("Importing gait...")
+	gaitpath = "gaits/GaitArray.csv"
+	global gait_array
+	global gait_array_size
+	#                 leg1    leg2    leg3    leg4    leg5    leg6
+	#                tz,txy  tz,txy  tz,txy  tz,txy  tz,txy  tz,txy 
+	gait_array =   [[], [], [], [], [], [], [], [], [], [], [], []]
+
+	with open(gaitpath, newline='') as csvfile:
+		data = list(csv.reader(csvfile))
+	data.pop(0)
+	gait_array = np.array(data)
+	print(gait_array)
 
 
-
+read_in_gaits()
+#print(gait_array)
 
 
 
