@@ -18,20 +18,21 @@ green=(0,128,0)
 pink=(255,105,180)
 
 #numpy print format
-np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
+np.set_printoptions(formatter={'float': '{: 0.2f}'.format})
 
-
-	
-
-class pygame_functions:
+class pygame_screens:
 	def __init__(self):
 		#Pygame setup
-		self.HEIGHT = 1080
-		self.WIDTH = 1920
+		#self.HEIGHT = 1080
+		#self.WIDTH = 1920
+		self.HEIGHT = int(1080)
+		self.WIDTH = int(1920/2)
 		self.txtrow = int(self.HEIGHT/15)
 		self.txtcol = int(self.WIDTH/100)
+		self.lifescale = 1 #1 pixel = 1mm
 		pygame.init()
-		self.screen_flags = pygame.FULLSCREEN
+		#self.screen_flags = pygame.FULLSCREEN
+		self.screen_flags = pygame.RESIZABLE
 		self.screen = pygame.display.set_mode((self.WIDTH, self.HEIGHT),self.screen_flags)
 		pygame.display.set_caption("HexaPi")
 		self.screen.fill(white)
@@ -45,16 +46,23 @@ class pygame_functions:
 		for r in range(self.txtrow):
 			for c in range(self.txtcol):
 				self.pgtxt[r,c] = self.pgtxt_init()
-	
+		self.screenrunning = True
+		
+	def closescreen(self):
+		self.screenrunning = False
+		time.sleep(0.1)
+		pygame.display.quit()
+		pygame.init()
+		
 	def cord(self,pos):
 		scn_offset_x = self.WIDTH/2
 		scn_offset_y = self.HEIGHT/2
-		x=int(scn_offset_x+pos[0])
-		y=int(-scn_offset_y+self.HEIGHT-pos[1])
+		x=int(scn_offset_x+self.lifescale*pos[0])
+		y=int(-scn_offset_y+self.HEIGHT-self.lifescale*pos[1])
 		return [x,y]
 		
 	def txt(self,msg,color,row,col,font_size):
-		pos = self.cord([-(self.WIDTH/2)+col*100,(self.HEIGHT/2)-row*15])
+		pos = [int(col*100),int(row*15)]
 		mesg = self.font_style[font_size-20].render(msg, True, color)
 		self.screen.blit(mesg, pos)
 		
@@ -100,9 +108,9 @@ class pygame_functions:
 	
 	def DrawLimitSphere(self,Radius,centerxyz,limcolor):
 		centerxy = self.cord([centerxyz[0][0],centerxyz[1][0]])
-		pygame.draw.circle(self.screen,limcolor,centerxy,Radius,1)
+		pygame.draw.circle(self.screen,limcolor,centerxy,self.lifescale*Radius,1)
 
-def pygame_screen():
+def pygame_screen_loop():
 	#Local Variables
 	screen_FPS = 30
 	screen_refresh_rate = (1/screen_FPS)
@@ -110,50 +118,63 @@ def pygame_screen():
 	hxsim = hexapi_simulator()
 	
 	#global Variable
-	global pgf
-	pgf = pygame_functions()
+	global pgs, exit_screen
+	pgs = pygame_screens()
 	
 	PGrow = 56 #Pygame loop status
-	pgf.pgtxt[PGrow,0].msg = "Starting pygame_screen thread"
-	pgf.pgtxt[PGrow+1,0].msg = "Pygame loop FPS: " + str(screen_FPS)
+	pgs.pgtxt[PGrow,0].msg = "Starting pygame_screen_loop thread"
+	pgs.pgtxt[PGrow+1,0].msg = "Pygame loop FPS: " + str(screen_FPS)
 	
 	while True:
-		while not exit_main:
-			if proctime > screen_refresh_rate:
-				proctime = screen_refresh_rate
-			time.sleep(screen_refresh_rate-proctime)
-			tic = time.perf_counter()
-			pgf.screen.fill(white)
-			
-			#draw all the pgtxt's
-			pgf.drawgptxt()
-			
-			if mods.Sim_Walk_module == "RUN":
-				pgf.txt("Press the Triangle to exit Walk Simulator",green,0,0,30)
-				hxsim.refresh_sim()
-			
-			#All Stopped
-			if mods.allstopped:
-				pgf.txt("Press the PS button for 1 second to start Exit Program",black,0,0,30)
-				pgf.txt("Press the Triangle button to start Walk Simulator",green,2,0,30)
-				pgf.txt("Press the Circle button to start x",red,4,0,30)
-				pgf.txt("Press the Cross button to start x",blue,6,0,30)
-				pgf.txt("Press the Square button to start x",pink,8,0,30)
-			
-			toc = time.perf_counter()
-			proctime = toc - tic
-			procmsg = f"pygame_screen loop took : {proctime:0.6f} seconds to complete."
-			pgf.pgtxt[PGrow,0].msg = procmsg
-			if proctime > refresh_rate:
-				pgf.txt("Lagging!",red,PGrow,4,30)
-			
-			pygame.display.update()
-		
-		pgf.screen.fill(white)	
-		pgf.pgtxt[PGrow,0].msg = "Waiting for Main Loop"
+		pgs.screen.fill(white)	
+		pgs.pgtxt[PGrow,0].msg = "Loading...."
+		pgs.pgtxt[PGrow+1,0].msg = "Waiting for Main Loop"
 		pygame.display.update()
-		time.sleep(1)
-	print("End of pygame_screen thread")
+		time.sleep(0.25)
+		while not exit_main:
+			#Re-initialize screen if not running but should be:
+			if (exit_screen == False) and (pgs.screenrunning == False):
+				pgs = pygame_screens()
+				
+			#Quit screen if running but shouldn't be:
+			if (exit_screen == True) and (pgs.screenrunning == True):
+				pgs.closescreen()
+				
+			#Wait for controller to tell screen to start:
+			if (exit_screen == True) and (pgs.screenrunning == False):
+				time.sleep(0.25)
+			
+			while (exit_screen == False) and (pgs.screenrunning == True):
+				if proctime > screen_refresh_rate:
+					proctime = screen_refresh_rate
+				time.sleep(screen_refresh_rate-proctime)
+				tic = time.perf_counter()
+				pgs.screen.fill(white)
+				
+				#draw all the pgtxt's
+				pgs.drawgptxt()
+				
+				if mods.Sim_Walk_module == "RUN":
+					pgs.txt("Press the Triangle to exit Walk Simulator",green,0,0,30)
+					hxsim.refresh_sim()
+				
+				#All Stopped
+				if mods.allstopped:
+					pgs.txt("Press the PS button for 1 second to start Exit Program",black,0,0,30)
+					pgs.txt("Press the Triangle button to start Walk Simulator",green,2,0,30)
+					pgs.txt("Press the Circle button to start x",red,4,0,30)
+					pgs.txt("Press the Cross button to start x",blue,6,0,30)
+					pgs.txt("Press the Square button to start x",pink,8,0,30)
+				
+				toc = time.perf_counter()
+				proctime = toc - tic
+				procmsg = f"pygame_screen_loop loop took : {proctime:0.6f} seconds to complete."
+				pgs.pgtxt[PGrow,0].msg = procmsg
+				if proctime > screen_refresh_rate:
+					pgs.txt("Lagging!",red,PGrow,4,30)
+				
+				pygame.display.update()
+	print("End of pygame_screen_loop thread")
 #-----------------------Pygame Classes
 class hexapi_simulator:
 	def __init__(self):
@@ -164,27 +185,27 @@ class hexapi_simulator:
 		self.zaxis  = np.array([[0],[0],[1],[1]])
 
 		#Define Global Coords
-		self.g_coordscale = 75
+		self.g_coordscale = 75 #mm
 		self.g_xaxis = np.dot(MatScale(self.g_coordscale),self.xaxis)
 		self.g_yaxis = np.dot(MatScale(self.g_coordscale),self.yaxis)
 		self.g_zaxis = np.dot(MatScale(self.g_coordscale),self.zaxis)
 
 		#Draw Body Coords:
-		self.b_coordscale = 50
+		self.b_coordscale = 50 #mm
 
 		#Leg Coords
-		self.L_coordscale = 35
+		self.L_coordscale = 35 #mm
 		
 	def refresh_sim(self):
 		#Draw Global
-		pgf.DrawxyzCoord("g",self.origin,self.g_xaxis,self.g_yaxis,self.g_zaxis,red,20)
+		pgs.DrawxyzCoord("g",self.origin,self.g_xaxis,self.g_yaxis,self.g_zaxis,red,20)
 		
 		#Draw Body Coords:
 		b_origin = Xlator(self.origin,hx.M_gtob,hx.R_gtob)
 		b_xaxis = Xlator(np.dot(MatScale(self.b_coordscale),self.xaxis),hx.M_gtob,hx.R_gtob)
 		b_yaxis = Xlator(np.dot(MatScale(self.b_coordscale),self.yaxis),hx.M_gtob,hx.R_gtob)
 		b_zaxis = Xlator(np.dot(MatScale(self.b_coordscale),self.zaxis),hx.M_gtob,hx.R_gtob)
-		pgf.DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,seagreen,20)
+		pgs.DrawxyzCoord("b",b_origin,b_xaxis,b_yaxis,b_zaxis,seagreen,20)
 		
 		for leg in range(6):
 			#Draw Leg Coords
@@ -193,40 +214,35 @@ class hexapi_simulator:
 			L_xaxis = Xlator2x(np.dot(MatScale(self.L_coordscale),self.xaxis),hx.M_gtob,hx.R_gtob,hx.M_btoL[leg],hx.R_btoL[leg])
 			L_yaxis = Xlator2x(np.dot(MatScale(self.L_coordscale),self.yaxis),hx.M_gtob,hx.R_gtob,hx.M_btoL[leg],hx.R_btoL[leg])
 			L_zaxis = Xlator2x(np.dot(MatScale(self.L_coordscale),self.zaxis),hx.M_gtob,hx.R_gtob,hx.M_btoL[leg],hx.R_btoL[leg])
-			pgf.DrawxyzCoord(axName,L_origin,L_xaxis,L_yaxis,L_zaxis,blue,20)
+			pgs.DrawxyzCoord(axName,L_origin,L_xaxis,L_yaxis,L_zaxis,blue,20)
 			
 			#Draw Limit sphere about datum
-			DatumPos = Xlator3x(hx.P_D, hx.M_gtob, hx.R_gtob, hx.M_btoL[leg], hx.R_btoL[leg], hx.M_LtoD, hx.R_LtoD)
-			pgf.DrawLimitSphere(hx.FootRangeRadius,DatumPos,black)
+			D_origin = Xlator3x(self.origin, hx.M_gtob, hx.R_gtob, hx.M_btoL[leg], hx.R_btoL[leg], hx.M_LtoD, hx.R_LtoD)
+			pgs.DrawLimitSphere(hx.FootRangeRadius,D_origin,black)
 			
 			#Draw Feet
-			pgf.DrawFoot(leg,hx.F_g[leg],purple,20)
-
-#-----------------------Get GaitArray from CSV
-def read_in_gaits():
-	print("Importing gait...")
-	gaitpath = "gaits/GaitArray.csv"
-	global gait_array
-	with open(gaitpath, newline='') as csvfile:
-		data = list(csv.reader(csvfile))
-	data.pop(0)
-	gait_array = np.array(data)
+			pgs.DrawFoot(leg,hx.F_g[leg],purple,20)
 
 #-----------------------Robot classes
 class hexapi_robot:
 	def __init__(self):
-		self.Qa = 7.75 #old length_arm
-		self.Qc = 14.5 #old length_claw
-		self.Qs = 5.75 #old length_shoulder
+		self.Lc = 152 #mm		length_claw
+		self.La = 87.2 #mm		length_arm
+		self.Ls = 57.5 #mm		length_shoulder
 		
-		#-----------------------Body Origin relative to global (Changed by Controller inputs)
-		self.strideboost= 6
-		self.spinboost = 3
-		self.M_gtob = np.array([[50],[50],[0],[1]])
-		self.R_gtob = [0,0,0]
+		#Control perspective
+		self.POV = "Global"
+		self.read_in_gaits()
+		self.t = 0
 		
-		#-----------------------Leg Origins relative to Body (CONSTANT)
-		self.BodyR = 100
+		#-----------------------Body origin relative to global origin (Changed by Controller inputs)
+		self.strideboost= 1
+		self.spinboost = 1
+		self.M_gtob = np.array([[50],[50],[0],[1]]) #mm
+		self.R_gtob = [0,0,0] #degrees
+		
+		#-----------------------Leg origins relative to Body origin (CONSTANT)
+		self.BodyR = 101 #mm
 		sqrt3 = m.sqrt(3)
 		M_btoL1 = np.array([[self.BodyR*sqrt3/2],	[self.BodyR*1/2],	[0],[1]])
 		M_btoL2 = np.array([[self.BodyR*0],			[self.BodyR*1],		[0],[1]])
@@ -240,22 +256,57 @@ class hexapi_robot:
 		R_btoL4 = [0,0,120]
 		R_btoL5 = [0,0,180]
 		R_btoL6 = [0,0,240]
-		self.M_btoL = np.array([M_btoL1,M_btoL2,M_btoL3,M_btoL4,M_btoL5,M_btoL6])
-		self.R_btoL = np.array([R_btoL1,R_btoL2,R_btoL3,R_btoL4,R_btoL5,R_btoL6])
+		self.M_btoL = np.array([M_btoL1,M_btoL2,M_btoL3,M_btoL4,M_btoL5,M_btoL6])  #mm
+		self.R_btoL = np.array([R_btoL1,R_btoL2,R_btoL3,R_btoL4,R_btoL5,R_btoL6])  #degrees
 		
-		#-----------------------Foot Datum Origin relative to Leg (CONSTANT)
-		self.FootRangeRadius = 45
-		self.FootDatumRadius = 40 #relative to leg origin
-		self.M_LtoD = np.array([[0],[self.FootDatumRadius*1],[0],[1]])
-		self.R_LtoD = [0,0,0]
-		self.P_D = self.M_LtoD
+		#-----------------------Foot Datum origins relative to Leg origins (CONSTANT)
+		self.FootRangeRadius = 60 #mm
+		self.FootDatumRadius = 110 #mm
+		self.M_LtoD = np.array([[0],[self.FootDatumRadius],[0],[1]])  #mm
+		self.R_LtoD = [0,0,0] #degrees
 		
-		#-----------------------Define feet position (initial on datum)
+		#-----------------------Foot positions relative to global origin (initial same as datum origin)
 		zeros = np.array([[0],[0],[0],[1]])
 		self.F_g = np.array([zeros,zeros,zeros,zeros,zeros,zeros])
 		for leg in range(6):
-			self.F_g[leg] = Xlator3x(self.P_D, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
+			self.F_g[leg] = Xlator3x(zeros, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)  #mm
+	
+	def read_in_gaits(self):
+		print("Importing gait...")
+		gaitpath = "gaits/GaitArray.csv"
+		global gait_array
+		with open(gaitpath, newline='') as csvfile:
+			data = list(csv.reader(csvfile))
+		data.pop(0)
+		self.gait_array = np.array(data)
+		self.gait_array_shape = self.gait_array.shape
+		self.gait_array_rows = self.gait_array_shape[0]-1
+		
+	def gait_next(self,rate):
+		if (self.t + int(rate)) > self.gait_array_rows:
+			self.t = 0
+		else:
+			self.t = self.t + int(rate)
+		
+	#functions
+	def move(self,ctr_move,ctr_rot):
+		if self.POV == "HexaPi":
+			ctr_move = np.dot(RotAll(self.R_gtob),ctr_move)
+		
+		#update body origin
+		
 
+		
+
+		
+		#update leg origins
+		for leg in range(6):
+			if self.gait_array[self.t][leg] != 0:
+				self.F_g[leg] = Xlator(self.F_g[leg],np.dot(MatScale(2),ctr_move),np.dot(2,ctr_rot))
+		
+		#update body origin
+		self.M_gtob = np.dot(MovA(ctr_move),self.M_gtob)
+		self.R_gtob = np.add(self.R_gtob,ctr_rot)
 class hexapi_servos:
 	def __init__(self):
 		#print("HexaPi Robot object initializing")
@@ -507,7 +558,7 @@ class psc_update:
 				self.released = 0
 class module_select:
 	def __init__(self):
-		functions = ["Sim_Walk_module"]
+		functions = ["Sim_Walk_module", "Walk_module"]
 		for i in range(len(functions)):
 			setattr(self, functions[i], "STOP")
 		self.allstopped = True
@@ -540,7 +591,7 @@ def controller_connection():
 	pygame.display.init()
 	idle_wait = 20
 	statrow = 59 #pygame text row to print controller status on
-	pgf.pgtxt[statrow,0].msg = "Starting controller_connection thread"
+	pgs.pgtxt[statrow,0].msg = "Starting controller_connection thread"
 	
 	while True:
 		time.sleep(2)
@@ -548,13 +599,13 @@ def controller_connection():
 			attempts = 0
 			controller_count = 0
 			prev_psc = None
-			pgf.pgtxt[statrow,0].msg = "Checking if controller_connected True or False"
+			pgs.pgtxt[statrow,0].msg = "Checking if controller_connected True or False"
 			while not controller_connected:
 				pygame.joystick.init()
 				attempts = attempts + 1
 				controller_count = pygame.joystick.get_count()
 				contmsg = "\rController count: " + str(controller_count) + " Scanning for Controllers... Attempt " + str(attempts)
-				pgf.pgtxt[statrow,0].msg = contmsg
+				pgs.pgtxt[statrow,0].msg = contmsg
 				#sys.stdout.write(msg)
 				#sys.stdout.flush()
 				if controller_count > 0:
@@ -562,11 +613,11 @@ def controller_connection():
 						pygame.joystick.init()
 						jsc = controller_class(i)
 						contmsg = "\nController found: " + jsc.ctrl_name
-						pgf.pgtxt[statrow,0].msg = contmsg
+						pgs.pgtxt[statrow,0].msg = contmsg
 						#print(contmsg)
 						if jsc.supported == True:
 							contmsg = "Controller connected: " + jsc.ctrl_name
-							pgf.pgtxt[statrow,0].msg = contmsg
+							pgs.pgtxt[statrow,0].msg = contmsg
 							#print(contmsg)
 							psc = psc_update(prev_psc, refresh_rate, jsc)
 							jid_connected = pygame.joystick.Joystick(i).get_id()
@@ -575,7 +626,7 @@ def controller_connection():
 						else:
 							controller_connected = False
 							contmsg = "Controller not supported: " + jsc.ctrl_name
-							pgf.pgtxt[statrow,0].msg = contmsg
+							pgs.pgtxt[statrow,0].msg = contmsg
 							#print(contmsg)
 							controller = None
 							pygame.joystick.quit()
@@ -591,7 +642,7 @@ def controller_connection():
 				#only check if controller inputs have gone unchanged for 'idle_wait' seconds
 				if idle_time > idle_wait:
 					contmsg = "\rController idle for " + str(idle_time) + ". Checking connection status"
-					pgf.pgtxt[statrow,0].msg = contmsg
+					pgs.pgtxt[statrow,0].msg = contmsg
 					#sys.stdout.write(contmsg)
 					#sys.stdout.flush()
 					pygame.joystick.quit()
@@ -600,12 +651,12 @@ def controller_connection():
 						jid = pygame.joystick.Joystick(jid_connected).get_id()
 						jsc = controller_class(jid)
 						contmsg = "Controller idle for " + str(idle_time) + "+ seconds but still connected: " + jsc.ctrl_name
-						pgf.pgtxt[statrow,0].msg = contmsg
+						pgs.pgtxt[statrow,0].msg = contmsg
 						#print(contmsg)
 						time.sleep(idle_wait)
 					except:
 						contmsg = "\nController lost connection: " + jsc.ctrl_name
-						pgf.pgtxt[statrow,0].msg = contmsg
+						pgs.pgtxt[statrow,0].msg = contmsg
 						#print(contmsg)
 						controller_connected = False
 		else:
@@ -677,32 +728,25 @@ def hexapi_main():
 	mods = module_select()
 	walk_idle = 0
 	
-	#Global Main Loop Variables:
+	#Main Loop Variables:
 	global exit_main, refresh_rate
 	exit_main = False
 	refresh_rate = 0.05
 	proctime = 0
 	
-	#Gait Array
-	global t
-	read_in_gaits()
-	t = 0
-	
 	#Robot Setup
-	global hs, hx, POV_Toggle, POV_msg, POV_XY
+	global hs, hx
 	hs = hexapi_servos()
 	hx = hexapi_robot()
-	POV_Toggle = False
-	POV_msg = "POV: Global"
-	POV_XY = np.array([[0],[0],[0],[1]])
 	
-	#Define Pygame_Screen thread
-	global pgf
-	pgf = None
-	pygame_screen_thread = threading.Thread(target=pygame_screen,args=())
+	#Define pygame_screen_loop thread
+	global pgs, exit_screen
+	pgs = None
+	exit_screen = False
+	pygame_screen_thread = threading.Thread(target=pygame_screen_loop,args=())
 	pygame_screen_thread.setDaemon(True)
 	pygame_screen_thread.start()
-	time.sleep(1) #give thread a seconds to init global object pgf
+	time.sleep(1) #give thread a seconds to init global object pgs
 	
 	#Define controller_connection thread
 	controller_connection_thread = threading.Thread(target=controller_connection,args=())
@@ -710,11 +754,14 @@ def hexapi_main():
 	controller_connection_thread.start()
 	
 	#Pygame status defaults
-	global MLrow, Modrow
+	global MLrow, Modrow,Ctrrow
 	MLrow = 50 #main loop status
-	pgf.pgtxt[MLrow+1,0].msg = "Main loop refresh rate limiter: " + str(refresh_rate)
-	Modrow = 47 #main loop status
-	pgf.pgtxt[Modrow,0].msg = "All modules in STOP mode"
+	pgs.pgtxt[MLrow+1,0].msg = "Main loop refresh rate limiter: " + str(refresh_rate)
+	Modrow = 40 #Module status
+	pgs.pgtxt[Modrow,0].msg = "All modules in STOP mode"
+	Ctrrow = 30 #Control info
+	pgs.pgtxt[Ctrrow,0].msg = "Control Info"
+	pgs.pgtxt[Ctrrow+1,0].msg = "Control POV: " + hx.POV
 	
 	#Main Loop
 	while not exit_main:
@@ -733,63 +780,63 @@ def hexapi_main():
 			
 			#run primary functions
 			main_input_monitor()
-			
-			
 			toc = time.perf_counter()
 			proctime = toc - tic
 			procmsg = f"Main loop took : {toc - tic:0.5f} seconds to complete."
-			pgf.pgtxt[MLrow,0].msg = procmsg
-		pgf.pgtxt[MLrow,0].msg = "Main loop is waiting for a controller to be connected"
-		time.sleep(0.5)
+			pgs.pgtxt[MLrow,0].msg = procmsg
+		pgs.pgtxt[MLrow,0].msg = "Main loop is waiting for a controller to be connected"
+		time.sleep(0.1)
 	print("End of hexapi_main code.")
 
 def main_input_monitor():
-	global exit_main
-	global controller_connected
+	global exit_main, controller_connected, exit_screen
 	global POV_msg, POV_Toggle, POV_XY, POV_Rot
 	
 	#hexapi_main Exit
 	if psc.b_ps.pds == 1:
-		print("PS Logo button pressed for 1 seconds. Exiting Monitor Loop...")
+		modmsg = "PS Logo button pressed for 1 seconds. Exiting Monitor Loop..."
+		pgs.pgtxt[Modrow,0].msg = modmsg
+		print(modmsg)
 		controller_connected = False
 		exit_main = True
+		exit_screen = True
 	
-	#Print button pessed name
-	for i in range(jsc.btn_num):
-		if psc.btn[i].pressed == 1:
-			print(psc.btn[i].name)
+	#Open/Close Pygame Screen
+	if psc.b_share.pds == 1:
+		print("Share button pressed for 1 seconds.")
+		if pgs.screenrunning == True:
+			modmsg = "Exiting Pygame Screen..."
+			pgs.pgtxt[Modrow,0].msg = modmsg
+			print(modmsg)
+			exit_screen = True
+		if pgs.screenrunning == False:
+			modmsg = "Starting Pygame Screen..."
+			print(modmsg)
+			exit_screen = False
 	
-	#Update move/rotate matrix based on controler inputs
-	if mods.Sim_Walk_module == "RUN":
-		#Perspective toggle
-		#Global_POV = np.array([[-psc.j_Lx.val],[psc.j_Ly.val],[0],[1]])
-		POV_Rot = [hx.R_gtob[0],hx.R_gtob[1],(hx.R_gtob[2]-hx.spinboost*psc.j_Rx.val)]
-		Global_POV = np.dot(MatScale(hx.strideboost),(np.array([[psc.j_Lx.val],[-psc.j_Ly.val],[0],[1]])))
-		HexaPi_POV = np.dot(RotAll(POV_Rot),Global_POV)
-		if psc.b_Lj.pressed == 1:
-			if POV_Toggle == False:
-				POV_Toggle = True
-				POV_msg = "POV: HexaPi"
-			else:
-				POV_Toggle = False
-				POV_msg = "POV: Global"
-		if POV_Toggle == False:
-			POV_XY = Global_POV
+	#Down button
+	#Change POV
+	if psc.b_down.pressed == 1:
+		if hx.POV == "Global":
+			hx.POV = "HexaPi"
 		else:
-			POV_XY = HexaPi_POV
-		pgf.pgtxt[24,0].msg = POV_msg
-		pgf.pgtxt[25,0].msg = "XY move vector wrt global:"
-		pgf.pgtxt[26,0].msg = str(POV_XY)
-		pgf.pgtxt[27,0].msg = "Press L js button to toggle perspective"
-		pgf.pgtxt[28,0].msg = "Rotation: " + str(POV_Rot)
+			hx.POV = "Global"
+		pgs.pgtxt[Ctrrow+1,0].msg = "Control POV: " + hx.POV
 	
+	#Cross
+	#Walk_module Run or Not
+	if psc.b_cross.pressed == 1:
+		mods.start_stop("Walk_module")
+	if mods.Walk_module == "RUN":
+		pgs.pgtxt[Modrow,0].msg = "Walk_module set to RUN"
+		update_hexapi_math()
 	
 	#Triangle
 	#Sim_Walk_module Run or Not
 	if psc.b_tri.pressed == 1:
 		mods.start_stop("Sim_Walk_module")
 	if mods.Sim_Walk_module == "RUN":
-		pgf.pgtxt[Modrow,0].msg = "Sim_Walk_module set to RUN"
+		pgs.pgtxt[Modrow,0].msg = "Sim_Walk_module set to RUN"
 		update_hexapi_math()
 
 def update_hexapi_math():
@@ -797,43 +844,28 @@ def update_hexapi_math():
 	#check how long inputs have been idle
 	if (psc.j_Rx.val == 0) and (psc.j_Lx.val == 0) and (psc.j_Ly.val == 0):
 		walk_idle = walk_idle + 1
+		ctr_move = np.array([[0],[0],[0],[1]])
+		ctr_rot = [0,0,0]
 	else:
 		walk_idle = 0
 		#Update Body coord translators with controller inputs:
-		hx.M_gtob[0][0] = hx.M_gtob[0][0] + int(POV_XY[0][0])
-		hx.M_gtob[1][0] = hx.M_gtob[1][0] + int(POV_XY[1][0])
-		hx.R_gtob[0] = hx.R_gtob[0] + int(POV_Rot[0])
-		hx.R_gtob[1] = hx.R_gtob[1] + int(POV_Rot[1])
-		hx.R_gtob[2] = hx.R_gtob[2] + int(POV_Rot[2])
-			
-		#Stepping
-		#gait_array
-		if t > 120:
-			t = 0
-		else:
-			t = t+1
-		pgf.pgtxt[Modrow-1,0].msg = "t: " + str(t)
-
+		#Controller Vals
+		ctr_move = np.dot(MatScale(hx.strideboost),np.array([[psc.j_Lx.val],[-psc.j_Ly.val],[0],[1]]))
+		ctr_rot = [0,0,hx.spinboost*-psc.j_Rx.val]
+		
+		#Update hx object
+		hx.move(ctr_move,ctr_rot)
+		hx.gait_next(1)
+		
+		pgs.pgtxt[Ctrrow+4,0].msg = "Walking..."
+	
 	#if idle time exceeds x seconds, then stand still
 	walk_idle_time = round(walk_idle*refresh_rate,2)
 	if walk_idle_time > 6:
 		idlemsg = "Robot has been idle for: " + str(walk_idle_time)
-		pgf.pgtxt[Modrow-1,0].msg = idlemsg
+		pgs.pgtxt[Ctrrow+4,0].msg = idlemsg
+	pgs.pgtxt[Ctrrow+2,0].msg = "last ctr_move: " + str(ctr_move)
+	pgs.pgtxt[Ctrrow+3,0].msg = "last ctr_rot: " + str(ctr_rot)
 
 #Start program
 hexapi_main()
-
-"""
-
-			
-
-			
-			#Draw updates
-			txt("M_gtob: " + str(hx.M_gtob),black,2,0,20)
-			txt("R_gtob: " + str(hx.R_gtob),black,3,0,20)
-		
-		#Print off controller button/joy valus:
-		for i in range(jsc.ax_num):
-			txt(psc.ax[i].name,black,i,6,20)
-			txt(str(psc.ax[i].val),black,i,8,20)
-"""
