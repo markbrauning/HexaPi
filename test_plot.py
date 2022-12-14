@@ -106,6 +106,12 @@ class pygame_screens:
 		pygame.draw.rect(self.screen,footcolor,[posxy[0],posxy[1],8,8])
 		self.txt2d("F"+str(leg),footcolor,posxy,font_size)
 	
+	def DrawFootVector(self,leg,datum,vec,vectorcolor,font_size):
+		xyvec = self.cord([vec[0][0],vec[1][0]])
+		xydatum = self.cord([datum[0][0],datum[1][0]])
+		pygame.draw.line(self.screen,vectorcolor,xydatum,xyvec,2)
+		self.txt2d("V"+str(leg),vectorcolor,xyvec,font_size)
+	
 	def DrawLimitSphere(self,Radius,centerxyz,limcolor):
 		centerxy = self.cord([centerxyz[0][0],centerxyz[1][0]])
 		pygame.draw.circle(self.screen,limcolor,centerxy,self.lifescale*Radius,1)
@@ -127,8 +133,7 @@ def pygame_screen_loop():
 	
 	while True:
 		pgs.screen.fill(white)	
-		pgs.pgtxt[PGrow,0].msg = "Loading...."
-		pgs.pgtxt[PGrow+1,0].msg = "Waiting for Main Loop"
+		pgs.pgtxt[PGrow,0].msg = "Waiting for Main Loop"
 		pygame.display.update()
 		time.sleep(0.25)
 		while not exit_main:
@@ -155,7 +160,11 @@ def pygame_screen_loop():
 				pgs.drawgptxt()
 				
 				if mods.Sim_Walk_module == "RUN":
-					pgs.txt("Press the Triangle to exit Walk Simulator",green,0,0,30)
+					pgs.txt("Press the Triangle to exit Simulated Walk Module",green,0,0,30)
+					hxsim.refresh_sim()
+					
+				if mods.Walk_module == "RUN":
+					pgs.txt("Press the cross to exit Walk Module",blue,0,0,30)
 					hxsim.refresh_sim()
 				
 				#All Stopped
@@ -219,9 +228,20 @@ class hexapi_simulator:
 			#Draw Limit sphere about datum
 			D_origin = Xlator3x(self.origin, hx.M_gtob, hx.R_gtob, hx.M_btoL[leg], hx.R_btoL[leg], hx.M_LtoD, hx.R_LtoD)
 			pgs.DrawLimitSphere(hx.FootRangeRadius,D_origin,black)
+			pgs.DrawLimitSphere(hx.StepTargetRadius,D_origin,green)
+			
+			#Draw Foot vectors
+			#pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vxy_g[leg],red,20)
+			#pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vr_g[leg],green,20)
+			pgs.DrawFootVector(leg,hx.D_g[leg],hx.V_g[leg],blue,20)
 			
 			#Draw Feet
-			pgs.DrawFoot(leg,hx.F_g[leg],purple,20)
+			if float(hx.gait_array[hx.t][leg]) > 0:
+				pgs.DrawFoot(leg,hx.F_g[leg],purple,20)
+				pgs.DrawFoot(leg,hx.F_L[leg],purple,20)
+			else:
+				pgs.DrawFoot(leg,hx.F_g[leg],red,20)
+				pgs.DrawFoot(leg,hx.F_L[leg],red,20)
 
 #-----------------------Robot classes
 class hexapi_robot:
@@ -230,13 +250,15 @@ class hexapi_robot:
 		self.La = 87.2 #mm		length_arm
 		self.Ls = 57.5 #mm		length_shoulder
 		
-		#Control perspective
+		#Controls
+		self.ctr_move = np.array([[0],[0],[0],[1]])
+		self.ctr_rot = [0,0,0]
 		self.POV = "Global"
 		self.read_in_gaits()
 		self.t = 0
 		
 		#-----------------------Body origin relative to global origin (Changed by Controller inputs)
-		self.strideboost= 1
+		self.strideboost= 2
 		self.spinboost = 1
 		self.M_gtob = np.array([[50],[50],[0],[1]]) #mm
 		self.R_gtob = [0,0,0] #degrees
@@ -261,15 +283,31 @@ class hexapi_robot:
 		
 		#-----------------------Foot Datum origins relative to Leg origins (CONSTANT)
 		self.FootRangeRadius = 60 #mm
+		self.StepTargetRadius = 40 #mm
 		self.FootDatumRadius = 110 #mm
 		self.M_LtoD = np.array([[0],[self.FootDatumRadius],[0],[1]])  #mm
 		self.R_LtoD = [0,0,0] #degrees
+		self.zeros = np.array([[0],[0],[0],[1]])
+		self.D_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
+		for leg in range(6):
+			self.D_g[leg] = Xlator3x(self.zeros, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
 		
 		#-----------------------Foot positions relative to global origin (initial same as datum origin)
-		zeros = np.array([[0],[0],[0],[1]])
-		self.F_g = np.array([zeros,zeros,zeros,zeros,zeros,zeros])
+		self.zeros = np.array([[0],[0],[0],[1]])
+		self.F_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
+		self.F_L = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
 		for leg in range(6):
-			self.F_g[leg] = Xlator3x(zeros, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)  #mm
+			self.F_g[leg] = self.D_g[leg]
+			self.F_g[leg]
+			
+		#Foot Vectors
+		self.zeros = np.array([[0],[0],[0],[1]])
+		self.Vxy_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
+		self.Vr_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
+		self.V_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
+		for leg in range(6):
+			self.Vxy_g[leg] = self.D_g[leg]
+			self.Vr_g[leg] = self.D_g[leg]
 	
 	def read_in_gaits(self):
 		print("Importing gait...")
@@ -287,26 +325,32 @@ class hexapi_robot:
 			self.t = 0
 		else:
 			self.t = self.t + int(rate)
-		
+			
+	def scale_to_step(self,vec):
+		pass
+	
 	#functions
-	def move(self,ctr_move,ctr_rot):
+	def move(self):
 		if self.POV == "HexaPi":
-			ctr_move = np.dot(RotAll(self.R_gtob),ctr_move)
+			self.ctr_move = np.dot(RotAll(self.R_gtob),self.ctr_move)
 		
 		#update body origin
-		
+		self.M_gtob = np.dot(MovA(self.ctr_move),self.M_gtob)
+		self.R_gtob = np.add(self.R_gtob,self.ctr_rot)
 
-		
-
-		
-		#update leg origins
+		#update foot
 		for leg in range(6):
-			if self.gait_array[self.t][leg] != 0:
-				self.F_g[leg] = Xlator(self.F_g[leg],np.dot(MatScale(2),ctr_move),np.dot(2,ctr_rot))
-		
-		#update body origin
-		self.M_gtob = np.dot(MovA(ctr_move),self.M_gtob)
-		self.R_gtob = np.add(self.R_gtob,ctr_rot)
+			Vr_L = np.array([[-25*self.ctr_rot[2]],[0],[0],[1]])
+			
+			self.Vr_g[leg] = Xlator3x(Vr_L, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
+			self.Vxy_g[leg] = np.dot(MovA(np.dot(MatScale(3),self.ctr_move)),self.D_g[leg])
+			self.V_g[leg] = np.add(np.add(np.subtract(self.Vxy_g[leg],self.D_g[leg]),np.subtract(self.Vr_g[leg],self.D_g[leg])),self.D_g[leg])
+			
+			if float(self.gait_array[self.t][leg]) > 0:
+				self.F_g[leg] = self.V_g[leg]
+			self.D_g[leg] = Xlator3x(self.zeros, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
+			self.F_L[leg] = inverseXlator2x(self.F_g[leg], self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg])
+	
 class hexapi_servos:
 	def __init__(self):
 		#print("HexaPi Robot object initializing")
@@ -707,6 +751,11 @@ def Xlator2x(P_L, M_gtob, R_gtob, M_btoL, R_btoL):
 	#P_g = RT_gtob * RT_btoL * P_L + RT_btog * M_btoL + M_gtob
 	P_g = np.add(np.add(multi_dot([RotAll(R_gtob),RotAll(R_btoL),P_L]),np.dot(RotAll(R_gtob),M_btoL)),M_gtob)
 	return P_g
+	
+def inverseXlator2x(P_g, M_gtob, R_gtob, M_btoL, R_btoL):
+	P_L = np.dot(np.subtract(np.dot(np.linalg.inv(RotAll(R_gtob)),np.subtract(P_g,M_gtob)),M_btoL),np.linalg.inv(RotAll(R_btoL)))
+	return P_L
+	
 def Xlator3x(P_D, M_gtob, R_gtob, M_btoL, R_btoL,M_LtoD, R_LtoD):
 	RT0 = RotAll(R_gtob)
 	RT1 = RotAll(R_btoL)
@@ -843,29 +892,30 @@ def update_hexapi_math():
 	global walk_idle, t
 	#check how long inputs have been idle
 	if (psc.j_Rx.val == 0) and (psc.j_Lx.val == 0) and (psc.j_Ly.val == 0):
+		if walk_idle == 0:
+			hx.ctr_move = np.array([[0],[0],[0],[1]])
+			hx.ctr_rot = [0,0,0]
 		walk_idle = walk_idle + 1
-		ctr_move = np.array([[0],[0],[0],[1]])
-		ctr_rot = [0,0,0]
 	else:
 		walk_idle = 0
 		#Update Body coord translators with controller inputs:
 		#Controller Vals
-		ctr_move = np.dot(MatScale(hx.strideboost),np.array([[psc.j_Lx.val],[-psc.j_Ly.val],[0],[1]]))
-		ctr_rot = [0,0,hx.spinboost*-psc.j_Rx.val]
+		hx.ctr_move = np.dot(MatScale(hx.strideboost),np.array([[psc.j_Lx.val],[-psc.j_Ly.val],[0],[1]]))
+		hx.ctr_rot = [0,0,hx.spinboost*-psc.j_Rx.val]
 		
 		#Update hx object
-		hx.move(ctr_move,ctr_rot)
-		hx.gait_next(1)
+		hx.move()
+		hx.gait_next(4)
 		
-		pgs.pgtxt[Ctrrow+4,0].msg = "Walking..."
+		pgs.pgtxt[Ctrrow+4,0].msg = "Walking..." + str(hx.t)
 	
 	#if idle time exceeds x seconds, then stand still
 	walk_idle_time = round(walk_idle*refresh_rate,2)
 	if walk_idle_time > 6:
 		idlemsg = "Robot has been idle for: " + str(walk_idle_time)
 		pgs.pgtxt[Ctrrow+4,0].msg = idlemsg
-	pgs.pgtxt[Ctrrow+2,0].msg = "last ctr_move: " + str(ctr_move)
-	pgs.pgtxt[Ctrrow+3,0].msg = "last ctr_rot: " + str(ctr_rot)
+	pgs.pgtxt[Ctrrow+2,0].msg = "ctr_move: " + str(hx.ctr_move)
+	pgs.pgtxt[Ctrrow+3,0].msg = "ctr_rot: " + str(hx.ctr_rot)
 
 #Start program
 hexapi_main()
