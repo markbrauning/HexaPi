@@ -26,7 +26,7 @@ class pygame_screens:
 		#self.HEIGHT = 1080
 		#self.WIDTH = 1920
 		self.HEIGHT = int(1080)
-		self.WIDTH = int(1920/2)
+		self.WIDTH = int(1920/1.5)
 		self.txtrow = int(self.HEIGHT/15)
 		self.txtcol = int(self.WIDTH/100)
 		self.lifescale = 1 #1 pixel = 1mm
@@ -101,10 +101,10 @@ class pygame_screens:
 		self.txt2d("",coordcolor,zax,font_size)
 		self.txt2d(coordname,coordcolor,orgn,font_size)
 	
-	def DrawFoot(self,leg,pos,footcolor,font_size):
+	def DrawFoot(self,leg,pos,footcolor,font_size,reff):
 		posxy = self.cord([pos[0][0],pos[1][0]])
 		pygame.draw.rect(self.screen,footcolor,[posxy[0],posxy[1],8,8])
-		self.txt2d("F"+str(leg),footcolor,posxy,font_size)
+		self.txt2d("F"+str(leg)+"_"+reff,footcolor,posxy,font_size)
 	
 	def DrawFootVector(self,leg,datum,vec,vectorcolor,font_size):
 		xyvec = self.cord([vec[0][0],vec[1][0]])
@@ -205,6 +205,14 @@ class hexapi_simulator:
 		#Leg Coords
 		self.L_coordscale = 35 #mm
 		
+		#Foot Local Coord
+		self.FL_coordscale = 35 #mm
+		self.zerosR = [0,0,0]
+		self.R_gtoFL = np.array([self.zerosR,self.zerosR,self.zerosR,self.zerosR,self.zerosR,self.zerosR])
+		self.M_gtoFL = np.array([self.origin,self.origin,self.origin,self.origin,self.origin,self.origin])
+		for leg in range (6):
+			self.M_gtoFL[leg] = np.array([[500],[-450+150*leg],[0],[1]])
+		
 	def refresh_sim(self):
 		#Draw Global
 		pgs.DrawxyzCoord("g",self.origin,self.g_xaxis,self.g_yaxis,self.g_zaxis,red,20)
@@ -231,17 +239,31 @@ class hexapi_simulator:
 			pgs.DrawLimitSphere(hx.StepTargetRadius,D_origin,green)
 			
 			#Draw Foot vectors
-			#pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vxy_g[leg],red,20)
-			#pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vr_g[leg],green,20)
+			pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vxy_g[leg],red,20)
+			pgs.DrawFootVector(leg,hx.D_g[leg],hx.Vr_g[leg],green,20)
 			pgs.DrawFootVector(leg,hx.D_g[leg],hx.V_g[leg],blue,20)
 			
 			#Draw Feet
 			if float(hx.gait_array[hx.t][leg]) > 0:
-				pgs.DrawFoot(leg,hx.F_g[leg],purple,20)
-				pgs.DrawFoot(leg,hx.F_L[leg],purple,20)
+				pgs.DrawFoot(leg,hx.F_g[leg],purple,20,"g")
 			else:
-				pgs.DrawFoot(leg,hx.F_g[leg],red,20)
-				pgs.DrawFoot(leg,hx.F_L[leg],red,20)
+				pgs.DrawFoot(leg,hx.F_g[leg],red,20,"g")
+			
+			#Draw Local Foot Coord system
+			FL_origin = Xlator(self.origin,self.M_gtoFL[leg], self.R_gtoFL[leg])
+			FL_xaxis = Xlator(np.dot(MatScale(self.FL_coordscale),self.xaxis),self.M_gtoFL[leg],self.R_gtoFL[leg])
+			FL_yaxis = Xlator(np.dot(MatScale(self.FL_coordscale),self.yaxis),self.M_gtoFL[leg],self.R_gtoFL[leg])
+			FL_zaxis = Xlator(np.dot(MatScale(self.FL_coordscale),self.zaxis),self.M_gtoFL[leg],self.R_gtoFL[leg])
+			pgs.DrawxyzCoord(axName,FL_origin,FL_xaxis,FL_yaxis,FL_zaxis,seagreen,20)
+			if float(hx.gait_array[hx.t][leg]) > 0:
+				pgs.DrawFoot(leg,np.add(FL_origin,hx.F_L[leg]),purple,20,"L")
+			else:
+				pgs.DrawFoot(leg,np.add(FL_origin,hx.F_L[leg]),red,20,"L")
+			pgs.txt(" Leg: "+str(leg+1)+str(hx.JointAngles[leg]),black,1+3*leg,6,25)
+			pgs.txt(" Leg: "+str(leg+1)+str(hx.F_L[leg]),black,2+3*leg,6,25)
+			
+
+
 
 #-----------------------Robot classes
 class hexapi_robot:
@@ -260,7 +282,9 @@ class hexapi_robot:
 		#-----------------------Body origin relative to global origin (Changed by Controller inputs)
 		self.strideboost= 2
 		self.spinboost = 1
-		self.M_gtob = np.array([[50],[50],[0],[1]]) #mm
+		self.stepboost = 20
+		self.bodyHeight = 160 #mm
+		self.M_gtob = np.array([[50],[50],[self.bodyHeight],[1]]) #mm
 		self.R_gtob = [0,0,0] #degrees
 		
 		#-----------------------Leg origins relative to Body origin (CONSTANT)
@@ -285,7 +309,7 @@ class hexapi_robot:
 		self.FootRangeRadius = 60 #mm
 		self.StepTargetRadius = 40 #mm
 		self.FootDatumRadius = 110 #mm
-		self.M_LtoD = np.array([[0],[self.FootDatumRadius],[0],[1]])  #mm
+		self.M_LtoD = np.array([[0],[self.FootDatumRadius],[-self.bodyHeight],[1]])  #mm
 		self.R_LtoD = [0,0,0] #degrees
 		self.zeros = np.array([[0],[0],[0],[1]])
 		self.D_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
@@ -298,16 +322,20 @@ class hexapi_robot:
 		self.F_L = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
 		for leg in range(6):
 			self.F_g[leg] = self.D_g[leg]
-			self.F_g[leg]
+		for leg in range(6):
+			self.F_L[leg] = inverseXlator2x(self.F_g[leg], self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.BodyR)
 			
 		#Foot Vectors
-		self.zeros = np.array([[0],[0],[0],[1]])
 		self.Vxy_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
 		self.Vr_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
 		self.V_g = np.array([self.zeros,self.zeros,self.zeros,self.zeros,self.zeros,self.zeros])
 		for leg in range(6):
+			self.V_g[leg] = self.D_g[leg]
 			self.Vxy_g[leg] = self.D_g[leg]
 			self.Vr_g[leg] = self.D_g[leg]
+		
+		self.zeros3 = [0,0,0]
+		self.JointAngles = [self.zeros3,self.zeros3,self.zeros3,self.zeros3,self.zeros3,self.zeros3]
 	
 	def read_in_gaits(self):
 		print("Importing gait...")
@@ -328,6 +356,55 @@ class hexapi_robot:
 			
 	def scale_to_step(self,vec):
 		pass
+
+	def xyz2angles(self, coords):
+		#Takes in the desired XYZ components for each leg and outputs the end angles
+		#[beta,theta,alpha] ie shoulder,arm,claw
+		x = coords[0][0]
+		y = coords[1][0]
+		z = coords[2][0]
+		
+		servo_angles = [0,0,0]
+		if(x == 0):
+			x = 0.00001
+		xy = ((x**2)+(y**2))**(0.5)
+		c = (((xy-self.Ls)**2)+(z**2))**(0.5)
+		if c == 0:
+			c = 0.00001
+
+		#Calculate alpha
+		alpha_acos_piece = fixAcos(((self.La**2)+(self.Lc**2)-(c**2))/(2*self.La*self.Lc))
+		alpha = m.acos(alpha_acos_piece) - (m.pi/2)
+
+		#Calculate theta
+		theta_acos_piece = fixAcos(((self.La**2)+(c**2)-(self.Lc**2))/(2*self.La*c))
+		theta_acos_piece1 = fixAcos(z/c)
+		if(xy<=self.Ls):
+			theta_piece1 = - m.acos(theta_acos_piece1)
+		else:
+			theta_piece1 = m.acos(theta_acos_piece1)
+		theta = theta_piece1 - m.acos(theta_acos_piece)
+
+		#Calculate beta
+		beta_acos_piece = fixAcos(x/xy)
+		beta = m.pi - m.acos(beta_acos_piece)
+
+		if (beta > m.pi):
+			beta = m.pi
+		if (alpha > m.pi):
+			alpha = m.pi
+		if (theta > m.pi):
+			theta = m.pi
+
+		if (beta < 0):
+			beta = 0
+		if (alpha < 0):
+			alpha = 0
+		if (theta < 0):
+			theta = 0
+			
+		servo_angles = [round(beta*(180/m.pi),0),round(theta*(180/m.pi),0),round(alpha*(180/m.pi),0)]
+		return servo_angles
 	
 	#functions
 	def move(self):
@@ -344,12 +421,17 @@ class hexapi_robot:
 			
 			self.Vr_g[leg] = Xlator3x(Vr_L, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
 			self.Vxy_g[leg] = np.dot(MovA(np.dot(MatScale(3),self.ctr_move)),self.D_g[leg])
-			self.V_g[leg] = np.add(np.add(np.subtract(self.Vxy_g[leg],self.D_g[leg]),np.subtract(self.Vr_g[leg],self.D_g[leg])),self.D_g[leg])
+			self.V_g[leg] = np.add(np.add(np.subtract(np.dot(MovA(np.dot(MatScale(3),self.ctr_move)),self.D_g[leg]),self.D_g[leg]),
+							np.subtract(Xlator3x(Vr_L, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD),self.D_g[leg])),self.D_g[leg])
 			
 			if float(self.gait_array[self.t][leg]) > 0:
 				self.F_g[leg] = self.V_g[leg]
+			self.F_g[leg][2][0] = float(self.gait_array[self.t][leg])*self.stepboost
+			
 			self.D_g[leg] = Xlator3x(self.zeros, self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg], self.M_LtoD, self.R_LtoD)
-			self.F_L[leg] = inverseXlator2x(self.F_g[leg], self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg])
+			self.F_L[leg] = inverseXlator2x(self.F_g[leg], self.M_gtob, self.R_gtob, self.M_btoL[leg], self.R_btoL[leg],self.BodyR)
+			
+			self.JointAngles[leg] = self.xyz2angles(self.F_L[leg])
 	
 class hexapi_servos:
 	def __init__(self):
@@ -707,6 +789,13 @@ def controller_connection():
 			break
 
 #-----------------------Math Functions
+def fixAcos(val):
+	if (val<=-1):
+		val = -1
+	if (val>=1):
+		val = 1
+	return val
+
 def MatScale(Scale):
 	S = np.array([[Scale,0,0,0],
 					 [0,Scale,0,0],
@@ -752,8 +841,14 @@ def Xlator2x(P_L, M_gtob, R_gtob, M_btoL, R_btoL):
 	P_g = np.add(np.add(multi_dot([RotAll(R_gtob),RotAll(R_btoL),P_L]),np.dot(RotAll(R_gtob),M_btoL)),M_gtob)
 	return P_g
 	
-def inverseXlator2x(P_g, M_gtob, R_gtob, M_btoL, R_btoL):
-	P_L = np.dot(np.subtract(np.dot(np.linalg.inv(RotAll(R_gtob)),np.subtract(P_g,M_gtob)),M_btoL),np.linalg.inv(RotAll(R_btoL)))
+def inverseXlator2x(P_g, M_gtob, R_gtob, M_btoL, R_btoL,BodyR):
+	R_Ltob = [val *(-1) for val in R_btoL]
+	M_Ltob = np.dot(MatScale(-1),M_btoL)
+	M_btog = np.dot(MatScale(-1),M_gtob)
+	R_btog = [val *(-1) for val in R_gtob]
+	
+	P_L = np.dot(RotAll(R_Ltob),np.add(M_Ltob,np.dot(RotAll(R_btog),np.add(M_btog,P_g))))
+
 	return P_L
 	
 def Xlator3x(P_D, M_gtob, R_gtob, M_btoL, R_btoL,M_LtoD, R_LtoD):
@@ -907,6 +1002,11 @@ def update_hexapi_math():
 		hx.move()
 		hx.gait_next(4)
 		
+		#MOVE THE MOTORS
+		for leg in range(6):
+				for pt in range(1,4):
+					hs.motor[leg+1][pt].move(hx.JointAngles[leg][pt-1])
+		
 		pgs.pgtxt[Ctrrow+4,0].msg = "Walking..." + str(hx.t)
 	
 	#if idle time exceeds x seconds, then stand still
@@ -916,6 +1016,7 @@ def update_hexapi_math():
 		pgs.pgtxt[Ctrrow+4,0].msg = idlemsg
 	pgs.pgtxt[Ctrrow+2,0].msg = "ctr_move: " + str(hx.ctr_move)
 	pgs.pgtxt[Ctrrow+3,0].msg = "ctr_rot: " + str(hx.ctr_rot)
+	pgs.pgtxt[Ctrrow+4,0].msg = "M_gtob: " + str(hx.M_gtob)
 
 #Start program
 hexapi_main()
