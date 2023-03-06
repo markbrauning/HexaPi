@@ -606,8 +606,7 @@ def P2G_xformer():
 					[m.sin(thz),mcos(thz),0],
 					[0,0,1])
 	gbR = (gbRx.dot(gbRy)).dot(gbRz)
-	gbT = np.array(
-
+	gbT = np.array()
 
 #Start program
 hexapi_main()
