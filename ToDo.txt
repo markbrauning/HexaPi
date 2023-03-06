@@ -3,7 +3,7 @@ Item 1
 	Edit rc.local
 	sudo nano /etc/rc.local
 	Include this before exit 0:
-	sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp.py &
+	sudo python /home/hexapi/Desktop/HexaPi/HexaPi_StartUp_Script.py &
 	reboot to test
 Item 2
 	figure out how to make sounds with HexaPi.
