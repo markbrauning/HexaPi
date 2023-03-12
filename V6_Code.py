@@ -411,9 +411,6 @@ def hexapi_main():
 	gait_selected = 0
 	t = 0
 	
-	#Read in Gait Array
-	read_in_gaits()
-	
 	#Define controller_connection thread
 	controller_connection_thread = threading.Thread(target=controller_connection,args=())
 	controller_connection_thread.setDaemon(True)
