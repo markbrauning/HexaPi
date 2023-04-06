@@ -1,5 +1,0 @@
-cd /home/hexapi/HexaPi
-git pull
-git add --all
-git commit -a -m "okay"
-git push
