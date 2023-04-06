@@ -441,7 +441,7 @@ class hexapi_servos:
 		self.pwm[1] = ServoKit(channels=16, address=0x41)
 		self.pwm[0].frequency = 50
 		self.pwm[1].frequency = 50
-		self.config_filename = "new_servo_config.csv"
+		self.config_filename = "servo_config.csv"
 		self.prop_names = [ "#0:leg (1 to 6)",
 							"#1:part (1=shoulder; 2=arm; 3=claw)",
 							"#2:hat",
