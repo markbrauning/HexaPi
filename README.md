@@ -1,5 +1,6 @@
 # HexaPi
 
+Use Github access token instead of password
 
 Need to set up PS3 controller:
 
